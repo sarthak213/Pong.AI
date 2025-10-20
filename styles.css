@@ -104,4 +104,4 @@ main { position: relative; }
 @media (max-width: 900px) {
     .container { padding: 10px; }
     #pong { width: 100%; height: auto; }
-}
+} 

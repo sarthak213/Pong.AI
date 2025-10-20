@@ -1,4 +1,4 @@
-# Pong.AI
+# Pong.AI 
 
 A modern single-file Pong implementation with configurable AI and powerups.
 
