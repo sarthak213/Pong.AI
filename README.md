@@ -69,6 +69,11 @@ How to run locally
 ------------------
 - Open `index.html` in a modern browser (Chrome/Edge/Firefox). No build step is required.
 
+How to play online
+------------------
+🎮 Play here → [Pong.AI on GitHub Pages](https://sarthak213.github.io/Pong.AI/)
+
+
 Potential next improvements
 ---------------------------
 - Add unit tests for scoring and ramp math (requires refactoring into smaller modules).
