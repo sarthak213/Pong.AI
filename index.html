@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Pong</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Pong</h1>
+            <div class="scoreboard">
+                <div class="player-info">
+                    <input id="playerName" placeholder="Enter name" value="Player">
+                    <div id="playerScore" class="score">0</div>
+                    <div id="playerLabel" class="label">Player</div>
+                    <div class="games" id="playerGames">
+                        <span class="game-dot" data-game="1"></span>
+                        <span class="game-dot" data-game="2"></span>
+                        <span class="game-dot" data-game="3"></span>
+                    </div>
+                </div>
+                <div class="vs">—</div>
+                <div class="ai-info">
+                    <input id="aiName" placeholder="AI" value="AI">
+                    <div id="aiScore" class="score">0</div>
+                    <div id="aiLabel" class="label">AI</div>
+                    <div class="games" id="aiGames">
+                        <span class="game-dot" data-game="1"></span>
+                        <span class="game-dot" data-game="2"></span>
+                        <span class="game-dot" data-game="3"></span>
+                    </div>
+                </div>
+            </div>
+            <div class="status">
+                <div id="deuceIndicator"></div>
+                <div class="game-number" id="gameNumber"></div>
+                <div id="systemMessage" class="system-message"></div>
+            </div>
+        </header>
+
+        <main>
+            <canvas id="pong" width="900" height="600"></canvas>
+            <div class="overlay" id="overlay">
+                <div id="message">Click or press Space to start</div>
+                <button id="restartBtn">Restart</button>
+            </div>
+        </main>
+
+        <footer>
+            <div class="controls">
+                <label>Ball speed ramp (s): <input id="rampTime" type="number" value="10" min="1" max="60"></label>
+                <label>First to: <input id="winScore" type="number" value="10" min="1" max="50"></label>
+                <label>Game mode:
+                    <select id="gameMode">
+                        <option value="one">One-shot (first to)</option>
+                        <option value="match">Match (best of 3)</option>
+                    </select>
+                </label>
+                <label>AI difficulty: <input id="aiDifficulty" type="range" min="1" max="5" value="3"></label>
+                <label class="switch">Extreme mode:
+                    <input id="extremeMode" type="checkbox">
+                    <span class="slider round"></span>
+                </label>
+                <button id="pauseBtn">Pause</button>
+                <div class="powerups">
+                    <div>Powerups left: <span id="powerupLeft">2</span></div>
+                    <div id="powerupActive">Active: -</div>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
