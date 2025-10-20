@@ -1,4 +1,4 @@
-# Pong.AI 
+# Pong.AI
 
 A modern single-file Pong implementation with configurable AI and powerups.
 
@@ -68,12 +68,6 @@ Developer notes
 How to run locally
 ------------------
 - Open `index.html` in a modern browser (Chrome/Edge/Firefox). No build step is required.
-
-How to play online
-------------------
-
-🎮 Play here → [Pong.AI on GitHub Pages](http://pong.ai/)
-
 
 Potential next improvements
 ---------------------------
