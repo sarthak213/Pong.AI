@@ -47,6 +47,10 @@ header {
 .game-dot { width:14px; height:14px; border-radius:50%; background:#1f2933; box-shadow: inset 0 -2px 4px rgba(0,0,0,0.4); border: 1px solid #374151; }
 .game-dot.filled { background:#ffd166; box-shadow: none; }
 
+/* Per-game win/loss indicators */
+.game-dot.win { background: #28a745; box-shadow: none; border-color: #1f7a2e; }
+.game-dot.loss { background: #ff4d4d; box-shadow: none; border-color: #a33232; } 
+
 .game-number { margin-left: 12px; color:#cfe6e6; font-weight:700; }
 
 .system-message { margin-top:6px; color:#ffb4a2; font-weight:700; }

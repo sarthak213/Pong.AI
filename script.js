@@ -39,6 +39,11 @@ if (gameModeSelect) {
         gamesWon = { player: 0, ai: 0 };
         scores = { player: 0, ai: 0 };
         updateScores();
+        // Clear any per-game win/loss markers when switching modes
+        const playerDots = document.querySelectorAll('#playerGames .game-dot');
+        const aiDots = document.querySelectorAll('#aiGames .game-dot');
+        playerDots.forEach(d => d.classList.remove('win', 'loss'));
+        aiDots.forEach(d => d.classList.remove('win', 'loss'));
         // Update visibility of match-specific UI
         updateMatchUI();
     });
@@ -407,8 +412,22 @@ function announceWinner(winner) {
     if (gameModeSelect?.value === 'match') {
         gamesWon[winner] += 1;
         if (gamesWon[winner] >= 2) {
+            // mark the final game's dot as win/loss
+            const currentGame = gamesWon.player + gamesWon.ai;
+            const idx = currentGame - 1;
+            const playerDots = document.querySelectorAll('#playerGames .game-dot');
+            const aiDots = document.querySelectorAll('#aiGames .game-dot');
+            if (winner === 'player') { 
+                if (playerDots[idx]) { playerDots[idx].classList.add('win'); playerDots[idx].classList.remove('loss'); }
+                if (aiDots[idx]) { aiDots[idx].classList.add('loss'); aiDots[idx].classList.remove('win'); }
+            } else {
+                if (aiDots[idx]) { aiDots[idx].classList.add('win'); aiDots[idx].classList.remove('loss'); }
+                if (playerDots[idx]) { playerDots[idx].classList.add('loss'); playerDots[idx].classList.remove('win'); }
+            }
             updateMatchUI();
-            showOverlay(`${winnerName} wins the match! Click Restart to play again.`);
+            // show final match score (e.g. "Player wins the match by 2-1")
+            const other = (winner === 'player') ? 'ai' : 'player';
+            showOverlay(`${winnerName} wins the match by ${gamesWon[winner]}-${gamesWon[other]}. Click Restart to play again.`);
             // reset points for display consistency after match/game end
             scores.player = 0;
             scores.ai = 0;
@@ -432,6 +451,17 @@ function announceWinner(winner) {
         } else {
             updateMatchUI();
             const currentGame = gamesWon.player + gamesWon.ai;
+            // mark the per-game dot for this completed game
+            const idx = currentGame - 1;
+            const playerDots = document.querySelectorAll('#playerGames .game-dot');
+            const aiDots = document.querySelectorAll('#aiGames .game-dot');
+            if (winner === 'player') {
+                if (playerDots[idx]) { playerDots[idx].classList.add('win'); playerDots[idx].classList.remove('loss'); }
+                if (aiDots[idx]) { aiDots[idx].classList.add('loss'); aiDots[idx].classList.remove('win'); }
+            } else {
+                if (aiDots[idx]) { aiDots[idx].classList.add('win'); aiDots[idx].classList.remove('loss'); }
+                if (playerDots[idx]) { playerDots[idx].classList.add('loss'); playerDots[idx].classList.remove('win'); }
+            }
             showOverlay(`${winnerName} wins game ${currentGame}. Click or press Space to start next game.`);
             // reset per-game state for next game
             scores.player = 0;
@@ -477,6 +507,7 @@ function updateMatchUI() {
     const playerDots = document.querySelectorAll('#playerGames .game-dot');
     const aiDots = document.querySelectorAll('#aiGames .game-dot');
     playerDots.forEach((dot, i) => {
+        // Preserve win/loss markers so they reflect each completed game.
         dot.classList.toggle('filled', i < gamesWon.player);
     });
     aiDots.forEach((dot, i) => {
@@ -615,6 +646,11 @@ restartBtn.addEventListener('click', () => {
     aiSpeedMultiplier = 1;
     powerupUsedThisPoint = false;
     updatePowerupUI();
+    // Clear per-game win/loss markers on full restart
+    const playerDots = document.querySelectorAll('#playerGames .game-dot');
+    const aiDots = document.querySelectorAll('#aiGames .game-dot');
+    playerDots.forEach(d => d.classList.remove('win', 'loss'));
+    aiDots.forEach(d => d.classList.remove('win', 'loss'));
     updateMatchUI();
     showOverlay('Click or press Space to start');
     // Re-enable mode and name inputs on restart
