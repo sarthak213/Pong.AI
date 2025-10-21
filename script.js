@@ -1,16 +1,100 @@
+// Resets all game and match state and UI
+function resetGameAndMatch() {
+    scores.player = 0;
+    scores.ai = 0;
+    gamesWon = { player: 0, ai: 0 };
+    updateScores();
+    ball = resetBallState();
+    running = false;
+    powerupsLeft = 2;
+    activePowerup = null;
+    aiSpeedMultiplier = 1;
+    powerupUsedThisPoint = false;
+    PADDLE_HEIGHT_current = PADDLE_HEIGHT;
+    playerSpeedMultiplier = 1;
+    matchEnded = false;
+    updatePowerupUI();
+    // Clear all per-game UI markers (win/loss/filled)
+    const playerDots = document.querySelectorAll('#playerGames .game-dot');
+    const aiDots = document.querySelectorAll('#aiGames .game-dot');
+    playerDots.forEach(d => d.classList.remove('win', 'loss', 'filled'));
+    aiDots.forEach(d => d.classList.remove('win', 'loss', 'filled'));
+    // Reset the visible game counter for match mode
+    const gameNumberEl = document.getElementById('gameNumber');
+    if (gameModeSelect?.value === 'match' && gameNumberEl) {
+        gameNumberEl.textContent = 'Game 1';
+    } else if (gameNumberEl) {
+        gameNumberEl.textContent = '';
+    }
+    updateMatchUI();
+    applyUIScale();
+    // Clear deuce/system indicators
+    if (deuceIndicator) deuceIndicator.textContent = '';
+    if (systemMessage) systemMessage.textContent = '';
+    showOverlay('Click or press Space to start');
+}
 const canvas = document.getElementById('pong'); 
 const ctx = canvas.getContext('2d');
 
-// Constants
-const PADDLE_WIDTH = 16;
-const PADDLE_HEIGHT = 100;
-const BALL_RADIUS = 10;
-const PLAYER_X = 20;
-const AI_X = () => canvas.width - PADDLE_WIDTH - 20;
+// Helper to get display width/height and devicePixelRatio for current canvas
+function getDisplaySize() {
+    const dpr = window.devicePixelRatio || 1;
+    return {
+        dpr,
+        displayW: canvas.width / dpr,
+        displayH: canvas.height / dpr
+    };
+}
+
+// Compute and apply a global UI scale so scoreboard, controls and canvas scale together.
+function applyUIScale() {
+    const baseW = BASE_CANVAS_W; // 900
+    const baseH = BASE_CANVAS_H; // 600
+    const vw = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
+    const vh = Math.max(document.documentElement.clientHeight || 0, window.innerHeight || 0);
+    // Compute scale by comparing available width and height to base (use smaller to ensure fit)
+    // Temporarily set scale to 1 to measure natural header/footer heights
+    document.documentElement.style.setProperty('--ui-scale', '1');
+    const headerEl = document.querySelector('header');
+    const footerEl = document.querySelector('footer');
+    const headerH = headerEl ? headerEl.getBoundingClientRect().height : 0;
+    const footerH = footerEl ? footerEl.getBoundingClientRect().height : 0;
+    const totalNeeded = headerH + baseH + footerH + 24; // small padding
+    const scaleW = vw / baseW;
+    const scaleH = vh / totalNeeded;
+    const scale = Math.min(1, Math.min(scaleW, scaleH));
+    // Apply to root container so all UI elements scale visually
+    document.documentElement.style.setProperty('--ui-scale', String(scale));
+    // store current value for canvas sizing
+    currentUIScale = scale;
+}
+
+// Current computed UI scale applied to container (1.0 means no scaling)
+let currentUIScale = 1;
+// Gameplay scale derived from displayed canvas size relative to base
+let gameplayScale = 1;
+
+// Base constants (logical sizes at 900x600 base resolution)
+const BASE_CANVAS_W = 900;
+const BASE_CANVAS_H = 600;
+const BASE_PADDLE_WIDTH = 16;
+const BASE_PADDLE_HEIGHT = 100;
+const BASE_BALL_RADIUS = 10;
+const BASE_PLAYER_X = 20; // distance from left edge
+const BASE_AI_MARGIN = 20;  // margin from right edge
+
+// Scaled constants (computed in resizeCanvas)
+let PADDLE_WIDTH = BASE_PADDLE_WIDTH;
+let PADDLE_HEIGHT = BASE_PADDLE_HEIGHT;
+let BALL_RADIUS = BASE_BALL_RADIUS;
+let PLAYER_X = BASE_PLAYER_X;
+let AI_MARGIN = BASE_AI_MARGIN;
+const AI_X = () => (canvas.width / (window.devicePixelRatio || 1)) - PADDLE_WIDTH - AI_MARGIN;
 
 // State
-let playerY = (canvas.height - PADDLE_HEIGHT) / 2;
-let aiY = (canvas.height - PADDLE_HEIGHT) / 2;
+const dpr_initial = window.devicePixelRatio || 1;
+let playerY = ((canvas.height / dpr_initial) - PADDLE_HEIGHT) / 2;
+let aiY = ((canvas.height / dpr_initial) - PADDLE_HEIGHT) / 2;
 
 let settings = {
     baseSpeed: 5,
@@ -46,6 +130,8 @@ if (gameModeSelect) {
         aiDots.forEach(d => d.classList.remove('win', 'loss'));
         // Update visibility of match-specific UI
         updateMatchUI();
+        // Recalculate UI scale since header/footer height may have changed (match dots)
+        applyUIScale();
     });
 }
 
@@ -78,6 +164,7 @@ let running = false;
 let startTimestamp = null; // for speed ramp
 let accumulatedPlayTime = 0; // seconds of active play (excludes paused time)
 let effectiveRampSeconds = 10; // frozen per-game ramp seconds (set at startGame)
+let matchEnded = false; // true when a match (or one-shot end) has finished
 // Powerup state
 let powerupsLeft = 2; // total uses per game
 let activePowerup = null; // 'speed' or 'size' or null
@@ -113,6 +200,7 @@ if (playerNameInput) {
             e.preventDefault();
             updateScores();
             updateMatchUI();
+            applyUIScale();
         }
     });
 }
@@ -122,6 +210,7 @@ if (aiNameInput) {
             e.preventDefault();
             updateScores();
             updateMatchUI();
+                applyUIScale();
         }
     });
 }
@@ -130,10 +219,12 @@ function resetBallState(servingTo = (Math.random() > 0.5 ? 'player' : 'ai')) {
     const angle = (Math.random() * Math.PI / 4) - (Math.PI / 8); // small angle
     const dir = servingTo === 'player' ? -1 : 1;
     // Start each serve at the base speed (speedMultiplier ramps during play)
-    const speed = settings.baseSpeed;
+    // base speed scaled by gameplayScale so larger/smaller UI keeps feel consistent
+    const speed = settings.baseSpeed * gameplayScale;
+    const dpr = window.devicePixelRatio || 1;
     return {
-        x: canvas.width / 2,
-        y: canvas.height / 2,
+        x: (canvas.width / dpr) / 2,
+        y: (canvas.height / dpr) / 2,
         speed: speed,
         vx: speed * Math.cos(angle) * dir,
         vy: speed * Math.sin(angle) * (Math.random() > 0.5 ? 1 : -1)
@@ -154,19 +245,21 @@ function drawCircle(x, y, r, color) {
 }
 
 function drawNet() {
+    const {dpr, displayW, displayH} = getDisplaySize();
     ctx.strokeStyle = '#393e46';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    for (let i = 10; i < canvas.height; i += 30) {
-        ctx.moveTo(canvas.width / 2, i);
-        ctx.lineTo(canvas.width / 2, i + 20);
+    for (let i = 10; i < displayH; i += 30) {
+        ctx.moveTo(displayW / 2, i);
+        ctx.lineTo(displayW / 2, i + 20);
     }
     ctx.stroke();
 }
 
 function draw() {
     // Background
-    drawRect(0, 0, canvas.width, canvas.height, '#222831');
+    const {dpr, displayW, displayH} = getDisplaySize();
+    drawRect(0, 0, displayW, displayH, '#222831');
     drawNet();
 
     // Paddles (use current paddle height for player which may be modified by powerup)
@@ -229,12 +322,13 @@ function update(dt, timestamp) {
     ball.x += dirX * currentSpeed * moveFactor;
     ball.y += dirY * currentSpeed * moveFactor;
 
-    // Top/bottom bounce
+    // Top/bottom bounce (use display coordinates)
+    const {displayH} = getDisplaySize();
     if (ball.y - BALL_RADIUS < 0) {
         ball.y = BALL_RADIUS;
         ball.vy = -ball.vy;
-    } else if (ball.y + BALL_RADIUS > canvas.height) {
-        ball.y = canvas.height - BALL_RADIUS;
+    } else if (ball.y + BALL_RADIUS > displayH) {
+        ball.y = displayH - BALL_RADIUS;
         ball.vy = -ball.vy;
     }
 
@@ -251,6 +345,7 @@ function update(dt, timestamp) {
     }
 
     // Score check
+    const displayW = canvas.width / (window.devicePixelRatio || 1);
     if (ball.x - BALL_RADIUS < 0) {
         // AI scores
         scores.ai += 1;
@@ -267,7 +362,7 @@ function update(dt, timestamp) {
         updatePowerupUI();
         if (!gameEnded) showOverlay('Point for AI — Click or Space to serve');
         return;
-    } else if (ball.x + BALL_RADIUS > canvas.width) {
+    } else if (ball.x + BALL_RADIUS > displayW) {
         // Player scores
         scores.player += 1;
         updateScores();
@@ -294,7 +389,7 @@ function update(dt, timestamp) {
         // time until ball reaches AI paddle (clamp to reasonable range)
         let timeToAI = (AI_X() - ball.x) / (ball.vx || 0.0001);
         timeToAI = Math.max(0, Math.min(timeToAI, 2000)); // in ms-like units if vx small
-        const predictedY = ball.y + ball.vy * timeToAI;
+    const predictedY = ball.y + ball.vy * timeToAI;
         // Player's paddle center to decide which corner to target (aim away from player)
         const playerCenter = playerY + PADDLE_HEIGHT_current / 2;
         const aimUp = playerCenter > predictedY ? 1 : -1;
@@ -302,17 +397,18 @@ function update(dt, timestamp) {
         const desiredNorm = 0.95 * aimUp;
         // Compute desired paddle center so collision yields desired normalized intersection
         let desiredPaddleCenter = predictedY + desiredNorm * (PADDLE_HEIGHT / 2);
-        // clamp target inside playfield
-        desiredPaddleCenter = clamp(desiredPaddleCenter, PADDLE_HEIGHT / 2, canvas.height - PADDLE_HEIGHT / 2);
+    // clamp target inside playfield
+    const {displayH: displayH_forAI} = getDisplaySize();
+    desiredPaddleCenter = clamp(desiredPaddleCenter, PADDLE_HEIGHT / 2, displayH_forAI - PADDLE_HEIGHT / 2);
         target = desiredPaddleCenter;
     }
     // AI speed scales with difficulty: 1..5 => slow..fast
-    let aiBase = 2 + settings.aiDifficulty * 1.5;
+    let aiBase = (2 + settings.aiDifficulty * 1.5) * gameplayScale;
     // If extreme mode is active, boost AI base significantly above slider max
     if (extremeMode) aiBase *= 5.0;
     // Apply aiSpeedMultiplier which can be reduced by player speed powerup
-    const aiSpeedMax = extremeMode ? 140 : 18;
-    const aiSpeed = clamp((aiBase + settings.speedMultiplier * 0.6) * aiSpeedMultiplier, 3, aiSpeedMax);
+    const aiSpeedMax = (extremeMode ? 140 : 18) * gameplayScale;
+    const aiSpeed = clamp((aiBase + settings.speedMultiplier * 0.6) * aiSpeedMultiplier, 3 * gameplayScale, aiSpeedMax);
     // Smooth AI movement: move toward target by a clamped amount scaled by dt
     // Use a deadzone to avoid jitter from tiny corrections
     const deadzone = 6;
@@ -327,7 +423,8 @@ function update(dt, timestamp) {
         const move = clamp(delta * aiAggression, -maxMovePerFrame * maxMoveScale, maxMovePerFrame * maxMoveScale);
         aiY += move;
     }
-    aiY = clamp(aiY, 0, canvas.height - PADDLE_HEIGHT);
+    const {displayH: displayH_forClamp} = getDisplaySize();
+    aiY = clamp(aiY, 0, displayH_forClamp - PADDLE_HEIGHT);
 }
 
 function updateScores() {
@@ -428,14 +525,16 @@ function announceWinner(winner) {
             // show final match score (e.g. "Player wins the match by 2-1")
             const other = (winner === 'player') ? 'ai' : 'player';
             showOverlay(`${winnerName} wins the match by ${gamesWon[winner]}-${gamesWon[other]}. Click Restart to play again.`);
+            matchEnded = true;
             // reset points for display consistency after match/game end
             scores.player = 0;
             scores.ai = 0;
             updateScores();
             // center ball/paddles for potential restart
             ball = resetBallState();
-            playerY = (canvas.height - PADDLE_HEIGHT_current) / 2;
-            aiY = (canvas.height - PADDLE_HEIGHT) / 2;
+            const displayH_final = canvas.height / (window.devicePixelRatio || 1);
+            playerY = (displayH_final - PADDLE_HEIGHT_current) / 2;
+            aiY = (displayH_final - PADDLE_HEIGHT) / 2;
             // Re-enable mode and name inputs when the match ends
             if (gameModeSelect) gameModeSelect.disabled = false;
             if (playerNameInput) playerNameInput.disabled = false;
@@ -474,21 +573,24 @@ function announceWinner(winner) {
             updateScores();
             // Reset ball and paddles to center for next game
             ball = resetBallState();
-            playerY = (canvas.height - PADDLE_HEIGHT_current) / 2;
-            aiY = (canvas.height - PADDLE_HEIGHT) / 2;
+            const displayH_next = canvas.height / (window.devicePixelRatio || 1);
+            playerY = (displayH_next - PADDLE_HEIGHT_current) / 2;
+            aiY = (displayH_next - PADDLE_HEIGHT) / 2;
             // After a single game win in a match where match continues, keep inputs disabled until match concludes or restart
             return;
         }
     }
     // One-shot mode
     showOverlay(`${winnerName} wins! Click Restart to play again.`);
+    matchEnded = true;
     // reset points after the game ends so board shows fresh values
     scores.player = 0;
     scores.ai = 0;
     updateScores();
     ball = resetBallState();
-    playerY = (canvas.height - PADDLE_HEIGHT_current) / 2;
-    aiY = (canvas.height - PADDLE_HEIGHT) / 2;
+    const displayH_one = canvas.height / (window.devicePixelRatio || 1);
+    playerY = (displayH_one - PADDLE_HEIGHT_current) / 2;
+    aiY = (displayH_one - PADDLE_HEIGHT) / 2;
     // Re-enable mode and name inputs when the one-shot game ends
     if (gameModeSelect) gameModeSelect.disabled = false;
     if (playerNameInput) playerNameInput.disabled = false;
@@ -507,17 +609,29 @@ function updateMatchUI() {
     const playerDots = document.querySelectorAll('#playerGames .game-dot');
     const aiDots = document.querySelectorAll('#aiGames .game-dot');
     playerDots.forEach((dot, i) => {
-        // Preserve win/loss markers so they reflect each completed game.
-        dot.classList.toggle('filled', i < gamesWon.player);
+        // Use 'filled' to indicate games won count, but preserve explicit win/loss classes
+        // if present (win/loss take visual precedence). Only set filled when no
+        // explicit win/loss class exists for that dot.
+        if (i < gamesWon.player) {
+            if (!dot.classList.contains('win') && !dot.classList.contains('loss')) dot.classList.add('filled');
+        } else {
+            dot.classList.remove('filled');
+        }
     });
     aiDots.forEach((dot, i) => {
-        dot.classList.toggle('filled', i < gamesWon.ai);
+        if (i < gamesWon.ai) {
+            if (!dot.classList.contains('win') && !dot.classList.contains('loss')) dot.classList.add('filled');
+        } else {
+            dot.classList.remove('filled');
+        }
     });
     const gameNumberEl = document.getElementById('gameNumber');
     const playerGamesContainer = document.getElementById('playerGames');
     const aiGamesContainer = document.getElementById('aiGames');
     if (gameModeSelect?.value === 'match') {
-        const currentGame = gamesWon.player + gamesWon.ai + 1;
+        const gamesCompleted = gamesWon.player + gamesWon.ai;
+        // Always show 'Game 1' at the start of a match
+        const currentGame = gamesCompleted + 1;
         gameNumberEl.textContent = `Game ${currentGame}`;
         if (playerGamesContainer) playerGamesContainer.style.display = 'flex';
         if (aiGamesContainer) aiGamesContainer.style.display = 'flex';
@@ -546,7 +660,8 @@ canvas.addEventListener('mousemove', function (evt) {
     const targetY = mouseY - PADDLE_HEIGHT_current / 2;
     // Smooth toward cursor. speed influenced by powerup multiplier.
     playerY += (targetY - playerY) * (0.35 * playerSpeedMultiplier);
-    playerY = clamp(playerY, 0, canvas.height - PADDLE_HEIGHT_current);
+    const displayH = canvas.height / (window.devicePixelRatio || 1);
+    playerY = clamp(playerY, 0, displayH - PADDLE_HEIGHT_current);
 });
 
 // Start on click or space
@@ -600,14 +715,15 @@ function startGame() {
 }
 
 canvas.addEventListener('click', () => {
-    if (!running) startGame();
+    // Only start when not running and match hasn't ended. Restart button must be used after match end.
+    if (!running && !matchEnded) startGame();
 });
 
 window.addEventListener('keydown', (e) => {
     if (e.code === 'Space') {
         e.preventDefault();
-        // If currently running, pause. If paused or not running, resume/start.
         if (running && !isPaused) {
+            // Pause
             isPaused = true;
             running = false;
             pauseBtn.classList.add('paused');
@@ -617,12 +733,14 @@ window.addEventListener('keydown', (e) => {
             }
             showOverlay('Paused — press Space to resume');
         } else if (isPaused) {
+            // Resume
             isPaused = false;
             pauseBtn.classList.remove('paused');
             running = true;
             startTimestamp = performance.now();
             hideOverlay();
-        } else if (!running) {
+        } else if (!running && !matchEnded) {
+            // Start a new game only if match hasn't ended
             startGame();
         }
     }
@@ -632,38 +750,6 @@ window.addEventListener('keydown', (e) => {
     } else if (e.key.toLowerCase() === 'd') {
         tryActivatePowerup('size');
     }
-});
-
-restartBtn.addEventListener('click', () => {
-    scores.player = 0;
-    scores.ai = 0;
-    gamesWon = { player: 0, ai: 0 };
-    updateScores();
-    ball = resetBallState();
-    running = false;
-    powerupsLeft = 2;
-    activePowerup = null;
-    aiSpeedMultiplier = 1;
-    powerupUsedThisPoint = false;
-    updatePowerupUI();
-    // Clear per-game win/loss markers on full restart
-    const playerDots = document.querySelectorAll('#playerGames .game-dot');
-    const aiDots = document.querySelectorAll('#aiGames .game-dot');
-    playerDots.forEach(d => d.classList.remove('win', 'loss'));
-    aiDots.forEach(d => d.classList.remove('win', 'loss'));
-    updateMatchUI();
-    showOverlay('Click or press Space to start');
-    // Re-enable mode and name inputs on restart
-    if (gameModeSelect) gameModeSelect.disabled = false;
-    if (playerNameInput) playerNameInput.disabled = false;
-    if (aiNameInput) aiNameInput.disabled = false;
-    // Re-enable AI difficulty on restart (always)
-    if (aiDifficultyInput) aiDifficultyInput.disabled = false;
-    // Re-enable extreme toggle on restart (always)
-    if (extremeModeInput) extremeModeInput.disabled = false;
-    // Re-enable ramp and win inputs as this is a fresh start
-    if (rampInput) rampInput.disabled = false;
-    if (winInput) winInput.disabled = false;
 });
 
 // React to AI difficulty slider changes
@@ -699,15 +785,52 @@ if (extremeModeInput) {
 
 // Resize canvas to CSS size if responsive
 function resizeCanvas() {
-    // Keep internal resolution consistent with displayed size
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width;
-            const aiSpeedMax = extremeMode ? 40 : 18;
-            const aiSpeed = clamp((aiBase + settings.speedMultiplier * 0.6) * aiSpeedMultiplier, 3, aiSpeedMax);
-    playerY = clamp(playerY, 0, canvas.height - PADDLE_HEIGHT_current);
-    aiY = clamp(aiY, 0, canvas.height - PADDLE_HEIGHT);
-    ball.x = canvas.width / 2;
-    ball.y = canvas.height / 2;
+    // Make the internal canvas resolution match the displayed CSS size while
+    // accounting for devicePixelRatio for crisp rendering.
+    // Compute display size from base size and applied UI scale so the entire UI fits
+    const dpr = window.devicePixelRatio || 1;
+    const displayWidth = Math.max(100, Math.floor(BASE_CANVAS_W * currentUIScale));
+    const displayHeight = Math.max(100, Math.floor(BASE_CANVAS_H * currentUIScale));
+
+    // Only resize if different to avoid clearing frequently
+    if (canvas.width !== Math.floor(displayWidth * dpr) || canvas.height !== Math.floor(displayHeight * dpr)) {
+        // Store ratios to rescale positions proportionally
+        const prevWidth = canvas.width || displayWidth * dpr;
+        const prevHeight = canvas.height || displayHeight * dpr;
+
+        // New internal size
+        canvas.width = Math.floor(displayWidth * dpr);
+        canvas.height = Math.floor(displayHeight * dpr);
+        canvas.style.width = displayWidth + 'px';
+        canvas.style.height = displayHeight + 'px';
+
+        // Scale drawing operations
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        // Rescale game objects positions so visuals remain centered
+        const scaleX = canvas.width / prevWidth;
+        const scaleY = canvas.height / prevHeight;
+        // Apply scaling to positions (ball and paddles)
+        ball.x = (ball.x || prevWidth / 2) * scaleX;
+        ball.y = (ball.y || prevHeight / 2) * scaleY;
+        playerY = (playerY || 0) * scaleY;
+        aiY = (aiY || 0) * scaleY;
+        // Recompute scaled gameplay constants based on display size relative to base
+        const displayW_new = canvas.width / dpr;
+        const displayH_new = canvas.height / dpr;
+    const scaleFactor = displayW_new / BASE_CANVAS_W;
+    // gameplayScale follows visual scale so speed/AI scale appropriately
+    gameplayScale = scaleFactor;
+        PADDLE_WIDTH = Math.max(8, Math.round(BASE_PADDLE_WIDTH * scaleFactor));
+        PADDLE_HEIGHT = Math.max(40, Math.round(BASE_PADDLE_HEIGHT * scaleFactor));
+        BALL_RADIUS = Math.max(4, Math.round(BASE_BALL_RADIUS * scaleFactor));
+        PLAYER_X = Math.max(8, Math.round(BASE_PLAYER_X * scaleFactor));
+        AI_MARGIN = Math.max(8, Math.round(BASE_AI_MARGIN * scaleFactor));
+
+        // Ensure paddles stay within bounds (use display coords)
+        playerY = clamp(playerY, 0, displayH_new - PADDLE_HEIGHT_current);
+        aiY = clamp(aiY, 0, displayH_new - PADDLE_HEIGHT);
+    }
 }
 
 function gameLoop(timestamp) {
@@ -722,11 +845,16 @@ function gameLoop(timestamp) {
 
 // Initial setup
 function init() {
-    // Make canvas visually larger while keeping resolution
-    canvas.style.width = '900px';
-    canvas.style.height = '600px';
-    canvas.width = 900;
-    canvas.height = 600;
+    // Make canvas responsive: let CSS drive displayed size and JS set internal resolution
+    // Initial sizing
+    resizeCanvas();
+    // Recompute when the window changes size
+    window.addEventListener('resize', () => {
+        resizeCanvas();
+        applyUIScale();
+    });
+    // Apply initial UI scale
+    applyUIScale();
     updateScores();
     updatePowerupUI();
     updateMatchUI();
@@ -777,7 +905,8 @@ function tryActivatePowerup(type) {
         aiSpeedMultiplier = 0.6; // slow AI while powerup is active
     } else if (type === 'size') {
         activePowerup = 'size';
-        PADDLE_HEIGHT_current = Math.min(PADDLE_HEIGHT * 1.6, canvas.height - 10);
+        const {displayH: dpH_forSize} = getDisplaySize();
+        PADDLE_HEIGHT_current = Math.min(PADDLE_HEIGHT * 1.6, dpH_forSize - 10);
     }
     powerupsLeft -= 1;
     powerupUsedThisPoint = true;
@@ -793,6 +922,26 @@ init();
 if (overlay) {
     overlay.addEventListener('click', (e) => {
         if (e.target && e.target.id === 'restartBtn') return; // handled elsewhere
-        if (!running) startGame();
+        if (!running && !matchEnded) startGame();
+    });
+}
+
+// Restart button: fully reset match/game state and UI
+if (restartBtn) {
+    restartBtn.addEventListener('click', () => {
+        // reset everything and immediately start a fresh game
+        // Reset everything but do NOT auto-start — show overlay so user can tweak settings
+        resetGameAndMatch();
+        // ensure inputs are enabled for configuration after restart
+        if (gameModeSelect) gameModeSelect.disabled = false;
+        if (playerNameInput) playerNameInput.disabled = false;
+        if (aiNameInput) aiNameInput.disabled = false;
+        if (aiDifficultyInput) aiDifficultyInput.disabled = false;
+        if (extremeModeInput) extremeModeInput.disabled = false;
+        if (rampInput) rampInput.disabled = false;
+        if (winInput) winInput.disabled = false;
+        // Keep matchEnded false so user may start via click/Space when ready
+        matchEnded = false;
+        showOverlay('Click or press Space to start');
     });
 }
