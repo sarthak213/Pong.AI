@@ -2,19 +2,24 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Pong</title>
+    <title>Pong.AI</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>Pong</h1>
-            <div class="scoreboard">
+            <h1 class="brand">Pong.AI</h1>
+            <div class="center-wrap">
+                <div class="scoreboard">
                 <div class="player-info">
                     <input id="playerName" placeholder="Enter name" value="Player">
                     <div id="playerScore" class="score">0</div>
                     <div id="playerLabel" class="label">Player</div>
+                    <div class="counters-side counters-left">
+                        <div class="counter small_counter" id="playerGamePointCountWrap"><span class="counter-label">GP</span> <span class="counter-val" id="playerGamePointCount">0</span></div>
+                        <div class="counter small_counter" id="playerMatchPointCountWrap"><span class="counter-label">MP</span> <span class="counter-val" id="playerMatchPointCount">0</span></div>
+                    </div>
                     <div class="games" id="playerGames">
                         <span class="game-dot" data-game="1"></span>
                         <span class="game-dot" data-game="2"></span>
@@ -26,31 +31,56 @@
                     <input id="aiName" placeholder="AI" value="AI">
                     <div id="aiScore" class="score">0</div>
                     <div id="aiLabel" class="label">AI</div>
+                    <div class="counters-side counters-right">
+                        <div class="counter small_counter" id="aiGamePointCountWrap"><span class="counter-val" id="aiGamePointCount">0</span> <span class="counter-label">GP</span></div>
+                        <div class="counter small_counter" id="aiMatchPointCountWrap"><span class="counter-val" id="aiMatchPointCount">0</span> <span class="counter-label">MP</span></div>
+                    </div>
                     <div class="games" id="aiGames">
                         <span class="game-dot" data-game="1"></span>
                         <span class="game-dot" data-game="2"></span>
                         <span class="game-dot" data-game="3"></span>
                     </div>
                 </div>
-            </div>
-            <div class="status">
-                <div id="deuceIndicator"></div>
-                <div class="game-number" id="gameNumber"></div>
-                <div id="systemMessage" class="system-message"></div>
+                </div>
+                <div class="status">
+                    <div id="deuceIndicator"></div>
+                    <div class="game-number" id="gameNumber"></div>
+                </div>
             </div>
         </header>
 
-        <main>
-            <canvas id="pong" width="900" height="600"></canvas>
-            <div class="overlay" id="overlay">
-                <div id="message">Click or press Space to start</div>
-            </div>
+        <!-- New layout: left = system area under heading, center = canvas, right = powerups/info -->
+        <main class="three-column">
+            <aside class="left-panel">
+                <div id="systemArea" class="system-area">
+                    <div id="deuceCenterWrap" class="deuce-center">
+                        <div class="counter deuce_counter" id="deuceCountWrap"><span class="deuce-label">Deuce</span> <span class="deuce-val" id="deuceCount">0</span></div>
+                    </div>
+                    <div id="systemMessage" class="system-message"></div>
+                </div>
+            </aside>
+
+            <section class="center-panel">
+                <canvas id="pong" width="900" height="600"></canvas>
+                <div class="overlay" id="overlay">
+                    <div id="message">Click or press Space to start</div>
+                </div>
+            </section>
+
+            <aside class="right-panel">
+                <h2 class="small-heading">Powerups</h2>
+                <div class="powerups-panel">
+                    <div>Powerups left: <span id="powerupLeft">2</span></div>
+                    <div id="powerupActive">Active: -</div>
+                    <div class="powerup-instructions">Activate: Press <strong>W</strong> for Speed, <strong>D</strong> for Size</div>
+                </div>
+            </aside>
         </main>
 
         <footer>
             <div class="controls">
                 <label>Ball speed ramp (s): <input id="rampTime" type="number" value="10" min="1" max="60"></label>
-                <label>First to: <input id="winScore" type="number" value="10" min="1" max="50"></label>
+                <!-- 'First to' removed; win score fixed to 7 -->
                 <label>Game mode:
                     <select id="gameMode">
                         <option value="one">One-shot (first to)</option>
@@ -64,10 +94,7 @@
                 </label>
                 <button id="pauseBtn">Pause</button>
                 <button id="restartBtn">Restart</button>
-                <div class="powerups">
-                    <div>Powerups left: <span id="powerupLeft">2</span></div>
-                    <div id="powerupActive">Active: -</div>
-                </div>
+                
             </div>
         </footer>
     </div>

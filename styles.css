@@ -2,15 +2,12 @@ body {
     background: #181d23;
     color: #fafafa;
     font-family: Arial, sans-serif;
-    text-align: center;
     margin: 0;
     padding: 0;
 }
 
-h1 {
-    margin-top: 40px;
-    margin-bottom: 20px;
-}
+h1 { margin: 0; }
+.brand { position: absolute; left: 20px; top: 18px; font-size: 28px; }
 
 #pong {
     display: block;
@@ -30,26 +27,47 @@ h1 {
 }
 
 .container {
-    max-width: 1100px;
+    width: 100%;
+    max-width: 1300px;
     margin: 0 auto 40px;
-    padding: 20px;
-    /* center origin for scaling */
+    padding: 20px 40px;
+    position: relative;
+    /* scale via CSS variable set by JS; keep origin to center so everything scales around canvas */
     transform-origin: top center;
-    /* scale via CSS variable set by JS */
     transform: scale(var(--ui-scale, 1));
 }
 
 header {
+    position: relative;
     display: flex;
-    justify-content: space-between;
+    justify-content: center; /* scoreboard centered relative to canvas */
     align-items: center;
     gap: 20px;
-    padding: 0 10px;
+    padding: 10px 0 6px 0;
 }
+
+.center-wrap { display:flex; flex-direction:column; align-items:center; gap:8px; }
+
+/* Counters on player and AI sides */
+.counters-side { display:flex; gap:8px; margin-top:8px; }
+.small_counter { display:inline-flex; align-items:center; gap:6px; padding:6px 8px; border-radius:8px; background: rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.03); color:#dbeafe; font-weight:700; font-size:13px; }
+.small_counter .counter-label { color:#9aa2a8; font-size:11px; }
+.small_counter .counter-val { color:#ffd166; font-weight:900; }
+
+/* Deuce counter centered between header and canvas */
+.deuce-center { width:100%; display:flex; justify-content:center; margin-top:8px; margin-bottom:8px; }
+.deuce_counter { display:flex; align-items:center; gap:10px; padding:8px 12px; border-radius:10px; background: linear-gradient(135deg, rgba(14,165,233,0.06), rgba(255,212,106,0.03)); border:1px solid rgba(255,209,102,0.08); color:#e6f6f6; font-weight:800; }
+.deuce_label { font-size:13px; color:#cfe6e6; }
+.deuce-val { color:#ffb4a2; font-size:16px; font-weight:900; }
+
+/* Hide counters when zero by default; visible when .visible class is applied */
+.small_counter, .deuce_counter { opacity: 0; transform: translateY(-6px); transition: opacity 180ms ease, transform 180ms ease; pointer-events: none; }
+.small_counter.visible, .deuce_counter.visible { opacity: 1; transform: translateY(0); pointer-events: auto; }
+
 
 .scoreboard .player-info, .scoreboard .ai-info { display:flex; flex-direction:column; align-items:center; gap:6px; }
 .scoreboard input { width:120px; padding:6px; border-radius:6px; border:1px solid #333; background:#0f1720; color:#e6f6f6; }
-.status { margin-left: 12px; color:#ffd166; font-weight:700; }
+#deuceIndicator { display:none; }
 #deuceIndicator { font-size:16px; }
 
 #pauseBtn { padding:6px 10px; border-radius:6px; border:none; background:#393e46; color:#fff; cursor:pointer; }
@@ -103,10 +121,51 @@ header {
 
 main { position: relative; }
 
+/* Keep canvas spacing minimal — system area will expand/collapse without reserving space when empty */
+main canvas { margin-top: 6px; }
+
+/* Central system area between header and canvas */
+.system-area { width: 100%; display:none; flex-direction:column; align-items:center; transition: height 220ms cubic-bezier(.2,.9,.2,1), opacity 180ms ease; }
+/* ensure message initially invisible until shown by JS helper */
+.system-message { opacity: 0; }
+.system-area > * { display:block; }
+.system-message { color:#ffb4a2; font-weight:700; background: transparent; padding:8px 12px; border-radius:8px; display:inline-block; border: 1px solid rgba(255,77,77,0); transition: opacity 220ms ease, border-color 220ms ease, background-color 220ms ease; }
+
+/* Special animation for EXTREME mode message to make it obvious the AI is unbeatable */
+@keyframes extremePulse {
+    0% { transform: scale(1); box-shadow: 0 0 0 rgba(255,77,77,0.0); }
+    40% { transform: scale(1.03); box-shadow: 0 8px 28px rgba(255,77,77,0.12); }
+    100% { transform: scale(1); box-shadow: 0 0 0 rgba(255,77,77,0.0); }
+}
+.system-message.extreme { color:#ff3333; background: transparent; font-weight:900; animation: extremePulse 1200ms ease-in-out infinite; transform-origin: center; border-color: rgba(255,51,51,0.9); box-shadow: 0 6px 20px rgba(255,51,51,0.06); }
+
+/* hide dedicated small counter wrappers so GP/MP counters are not visible; message will contain counts instead */
+.small_counter { display: none !important; }
+
+/* Smooth shift for main content when systemArea appears/disappears */
+main { position: relative; transition: transform 200ms cubic-bezier(.2,.9,.2,1); }
+
 /* Game root container to constrain base layout size */
 .game-root {
     width: 900px; /* base width */
     margin: 0 auto;
+}
+
+/* Three-column layout for main area */
+.three-column { display: grid; grid-template-columns: 220px 1fr 220px; gap: 12px; align-items: start; width: 100%; max-width: 1200px; margin: 0 auto; }
+.left-panel, .right-panel { padding: 6px 8px; }
+.center-panel { display:flex; justify-content:center; align-items:center; position: relative; }
+.small-heading { font-size:14px; margin:6px 0; color:#cfe6e6; }
+
+/* Powerups panel styling moved from footer */
+.powerups-panel { display:flex; flex-direction:column; gap:8px; align-items:flex-start; background: rgba(255,255,255,0.02); padding:10px; border-radius:8px; }
+.powerup-instructions { font-size:13px; color:#9aa2a8; }
+
+/* Responsive: stack into single column on narrow screens */
+@media (max-width: 900px) {
+    .three-column { grid-template-columns: 1fr; }
+    .left-panel, .right-panel { order: 0; }
+    .center-panel { order: 1; }
 }
 
 .overlay {

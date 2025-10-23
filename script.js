@@ -97,10 +97,12 @@ let playerY = ((canvas.height / dpr_initial) - PADDLE_HEIGHT) / 2;
 let aiY = ((canvas.height / dpr_initial) - PADDLE_HEIGHT) / 2;
 
 let settings = {
-    baseSpeed: 5,
+    // Raise base speed so ball feels snappier at game start
+    baseSpeed: 8,
     speedMultiplier: 1,
     rampSeconds: parseFloat(document.getElementById('rampTime')?.value || 10),
-    winScore: parseInt(document.getElementById('winScore')?.value || 10, 10),
+    // Fixed win score per request: games are to 7 points
+    winScore: 7,
     aiDifficulty: parseInt(document.getElementById('aiDifficulty')?.value || 3, 10)
 };
 
@@ -113,6 +115,19 @@ let playerNameInput = document.getElementById('playerName');
 let aiNameInput = document.getElementById('aiName');
 let pauseBtn = document.getElementById('pauseBtn');
 let deuceIndicator = document.getElementById('deuceIndicator');
+// Track deuce occurrences (increments each time play returns to 6-6)
+let deuceCount = 0;
+// Counters for game-point and match-point occurrences
+let gamePointCount = { player: 0, ai: 0 };
+let matchPointCount = { player: 0, ai: 0 };
+// lastPointState prevents repeatedly incrementing counters while state persists
+let lastPointState = null; // values: 'playerGame','aiGame','playerMatch','aiMatch' or null
+// Elements for dedicated counters
+const deuceCountEl = document.getElementById('deuceCount');
+const playerGamePointCountEl = document.getElementById('playerGamePointCount');
+const aiGamePointCountEl = document.getElementById('aiGamePointCount');
+const playerMatchPointCountEl = document.getElementById('playerMatchPointCount');
+const aiMatchPointCountEl = document.getElementById('aiMatchPointCount');
 let isPaused = false;
 
 // Listen for game mode changes
@@ -123,6 +138,11 @@ if (gameModeSelect) {
         gamesWon = { player: 0, ai: 0 };
         scores = { player: 0, ai: 0 };
         updateScores();
+        // reset counters when switching modes
+        deuceCount = 0;
+        gamePointCount = { player: 0, ai: 0 };
+        matchPointCount = { player: 0, ai: 0 };
+        lastPointState = null;
         // Clear any per-game win/loss markers when switching modes
         const playerDots = document.querySelectorAll('#playerGames .game-dot');
         const aiDots = document.querySelectorAll('#aiGames .game-dot');
@@ -188,6 +208,42 @@ const extremeModeInput = document.getElementById('extremeMode');
 const powerupLeftEl = document.getElementById('powerupLeft');
 const powerupActiveEl = document.getElementById('powerupActive');
 const systemMessage = document.getElementById('systemMessage');
+const systemArea = document.getElementById('systemArea');
+
+// Animate system area open/close by animating its height to avoid layout jumps.
+// This helper is defined at top-level so any caller (updateScores, updatePowerupUI, etc.)
+// can show/hide the system area immediately.
+function setSystemAreaVisible(vis) {
+    if (!systemArea) return;
+    const content = systemArea.querySelectorAll(':scope > *');
+    // measure full height
+    const prevTransition = systemArea.style.transition;
+    systemArea.style.transition = 'height 220ms cubic-bezier(.2,.9,.2,1), opacity 180ms ease';
+    if (vis) {
+        // expand: set height from 0 to scrollHeight
+        systemArea.style.display = 'flex';
+        const fullH = Array.from(content).reduce((sum, el) => sum + el.getBoundingClientRect().height + parseFloat(getComputedStyle(el).marginTop || 0) + parseFloat(getComputedStyle(el).marginBottom || 0), 0);
+        systemArea.style.height = '0px';
+        systemArea.offsetHeight; // force reflow
+        systemArea.style.opacity = '1';
+        systemArea.style.height = fullH + 'px';
+    } else {
+        // collapse: animate to 0
+        const curH = systemArea.getBoundingClientRect().height;
+        systemArea.style.height = curH + 'px';
+        systemArea.offsetHeight;
+        systemArea.style.opacity = '0';
+        systemArea.style.height = '0px';
+    }
+    // cleanup after transition
+    const cleanup = () => {
+        systemArea.style.transition = prevTransition;
+        if (!vis) systemArea.style.display = 'none';
+        systemArea.removeEventListener('transitionend', cleanup);
+        systemArea.style.height = '';
+    };
+    systemArea.addEventListener('transitionend', cleanup);
+}
 
 // When true, powerups are disabled because AI difficulty is at maximum
 let powerupsDisabledByDifficulty = false;
@@ -348,9 +404,7 @@ function update(dt, timestamp) {
     const displayW = canvas.width / (window.devicePixelRatio || 1);
     if (ball.x - BALL_RADIUS < 0) {
         // AI scores
-        scores.ai += 1;
-        updateScores();
-        const gameEnded = checkWin();
+        const gameEnded = handlePointScored('ai');
         ball = resetBallState('ai');
     // Reset powerup effects after the point
     activePowerup = null;
@@ -364,9 +418,7 @@ function update(dt, timestamp) {
         return;
     } else if (ball.x + BALL_RADIUS > displayW) {
         // Player scores
-        scores.player += 1;
-        updateScores();
-        const gameEnded = checkWin();
+        const gameEnded = handlePointScored('player');
         ball = resetBallState('player');
     // Reset powerup effects after the point
     activePowerup = null;
@@ -435,26 +487,39 @@ function updateScores() {
 
     // Deuce and Advantage display handling
     if (scores.player >= target - 1 && scores.ai >= target - 1) {
-        if (scores.player === scores.ai) {
+    if (scores.player === scores.ai) {
             // Deuce
             playerScoreEl.textContent = scores.player;
             aiScoreEl.textContent = scores.ai;
-            deuceIndicator.textContent = 'DEUCE';
+        // Show deuce in the system message area
+        showSystemMessage(`DEUCE${deuceCount > 1 ? ` — #${deuceCount}` : ''}`, false);
+                // show deuce prominently
+                if (deuceCountEl) {
+                    // only prefix with '#' when this is not the first time (count > 1)
+                    deuceCountEl.textContent = deuceCount > 1 ? `#${deuceCount}` : String(deuceCount);
+                    const wrap = document.getElementById('deuceCountWrap');
+                    if (wrap) wrap.classList.add('visible');
+                }
+            // reset lastPointState so new game/match point events can be counted after deuce
+            lastPointState = null;
         } else if (scores.player === scores.ai + 1) {
             // Player advantage
             playerScoreEl.textContent = 'ADV';
             aiScoreEl.textContent = scores.ai;
-            deuceIndicator.textContent = '';
+            // clear system message when advantage is shown
+            showSystemMessage('', false);
         } else if (scores.ai === scores.player + 1) {
             // AI advantage
             aiScoreEl.textContent = 'ADV';
             playerScoreEl.textContent = scores.player;
-            deuceIndicator.textContent = '';
+            // clear system message when advantage is shown
+            showSystemMessage('', false);
         } else {
             // Should not happen, but fallback
             playerScoreEl.textContent = scores.player;
             aiScoreEl.textContent = scores.ai;
-            deuceIndicator.textContent = '';
+            // clear system message in normal display
+            showSystemMessage('', false);
         }
     } else {
         // Normal display
@@ -462,6 +527,99 @@ function updateScores() {
         aiScoreEl.textContent = scores.ai;
         deuceIndicator.textContent = '';
     }
+
+    // Determine game-point and match-point states
+    // Game point: someone is one point away from reaching target AND not in immediate-match-winning situation
+    // Match point: in match mode, someone is one game away from winning the match (i.e., gamesWon + hypothetical game would reach required match wins)
+    // For this project assume best-of-3 match (first to 2 wins) as existing logic implies.
+    const neededToWinMatch = 2; // first to 2 wins
+
+    const checkAndCountPointState = (who) => {
+        // who: 'player' or 'ai'
+        const opponent = who === 'player' ? 'ai' : 'player';
+        // Match point check only in match mode
+        let isMatchPoint = false;
+        if (gameModeSelect?.value === 'match') {
+            const currentWins = gamesWon[who];
+            // If winning this game would reach neededToWinMatch
+            if ((currentWins + 1) >= neededToWinMatch) isMatchPoint = true;
+        }
+        // Game point: this point would make score >= target (unless deuce rules apply)
+        const wouldReachTarget = (scores[who] + 1) >= target;
+
+        if (isMatchPoint && wouldReachTarget) {
+            // Match point takes precedence over game point
+            const stateKey = who === 'player' ? 'playerMatch' : 'aiMatch';
+            if (lastPointState !== stateKey) {
+                // increment match point counter
+                matchPointCount[who] += 1;
+                lastPointState = stateKey;
+            }
+            // Show indicator
+            deuceIndicator.textContent = `${who === 'player' ? 'MATCH POINT' : 'MATCH POINT'}`;
+            deuceIndicator.textContent = 'MATCH POINT';
+            // Instead of separate counters, display counts in the system message itself
+            if (systemMessage) {
+                const playerCount = matchPointCount.player > 1 ? `#${matchPointCount.player}` : (matchPointCount.player > 0 ? String(matchPointCount.player) : '');
+                const aiCount = matchPointCount.ai > 1 ? `#${matchPointCount.ai}` : (matchPointCount.ai > 0 ? String(matchPointCount.ai) : '');
+                // Build text like 'MATCH POINT (Player: 2, AI: )' but keep concise
+                systemMessage.textContent = `MATCH POINT${playerCount || aiCount ? ` — P:${playerCount || 0} A:${aiCount || 0}` : ''}`;
+            }
+            return;
+        }
+
+        if (wouldReachTarget) {
+            const stateKey = who === 'player' ? 'playerGame' : 'aiGame';
+            if (lastPointState !== stateKey) {
+                gamePointCount[who] += 1;
+                lastPointState = stateKey;
+            }
+            deuceIndicator.textContent = 'GAME POINT';
+            // Display game-point counts directly in the system message
+            if (systemMessage) {
+                const playerCount = gamePointCount.player > 1 ? `#${gamePointCount.player}` : (gamePointCount.player > 0 ? String(gamePointCount.player) : '');
+                const aiCount = gamePointCount.ai > 1 ? `#${gamePointCount.ai}` : (gamePointCount.ai > 0 ? String(gamePointCount.ai) : '');
+                systemMessage.textContent = `GAME POINT${playerCount || aiCount ? ` — P:${playerCount || 0} A:${aiCount || 0}` : ''}`;
+            }
+            return;
+        }
+        // If neither, clear state if it was previously set
+        if (lastPointState && (lastPointState === 'playerGame' || lastPointState === 'aiGame' || lastPointState === 'playerMatch' || lastPointState === 'aiMatch')) {
+            lastPointState = null;
+        }
+    };
+
+    // Evaluate for both players (this will set indicator appropriately if one of them is in point state)
+    checkAndCountPointState('player');
+    checkAndCountPointState('ai');
+
+    // Optionally expose counters to a systemMessage area for visibility
+    // Update dedicated counter DOM nodes
+    // Update dedicated counter DOM nodes and visibility (wraps control visibility class)
+    const deuceWrap = document.getElementById('deuceCountWrap');
+    if (deuceCountEl) deuceCountEl.textContent = deuceCount > 1 ? `#${deuceCount}` : String(deuceCount);
+    if (deuceWrap) deuceWrap.classList.toggle('visible', deuceCount > 0);
+
+    const pGPwrap = document.getElementById('playerGamePointCountWrap');
+    if (playerGamePointCountEl) playerGamePointCountEl.textContent = gamePointCount.player > 1 ? `#${gamePointCount.player}` : String(gamePointCount.player);
+    if (pGPwrap) pGPwrap.classList.toggle('visible', gamePointCount.player > 0);
+
+    const aGPwrap = document.getElementById('aiGamePointCountWrap');
+    if (aiGamePointCountEl) aiGamePointCountEl.textContent = gamePointCount.ai > 1 ? `#${gamePointCount.ai}` : String(gamePointCount.ai);
+    if (aGPwrap) aGPwrap.classList.toggle('visible', gamePointCount.ai > 0);
+
+    const pMPwrap = document.getElementById('playerMatchPointCountWrap');
+    if (playerMatchPointCountEl) playerMatchPointCountEl.textContent = matchPointCount.player > 1 ? `#${matchPointCount.player}` : String(matchPointCount.player);
+    if (pMPwrap) pMPwrap.classList.toggle('visible', matchPointCount.player > 0);
+
+    const aMPwrap = document.getElementById('aiMatchPointCountWrap');
+    if (aiMatchPointCountEl) aiMatchPointCountEl.textContent = matchPointCount.ai > 1 ? `#${matchPointCount.ai}` : String(matchPointCount.ai);
+    if (aMPwrap) aMPwrap.classList.toggle('visible', matchPointCount.ai > 0);
+
+    // Determine if systemArea should be visible: if any of these have content
+    const shouldShowSystem = (deuceCount > 0) || (gamePointCount.player > 0) || (gamePointCount.ai > 0) || (matchPointCount.player > 0) || (matchPointCount.ai > 0) || (systemMessage && systemMessage.textContent && systemMessage.textContent.trim() !== '');
+    // system area visibility is handled by the top-level helper setSystemAreaVisible(vis)
+    setSystemAreaVisible(shouldShowSystem);
 }
 
 function isDeuce() {
@@ -539,9 +697,9 @@ function announceWinner(winner) {
             if (gameModeSelect) gameModeSelect.disabled = false;
             if (playerNameInput) playerNameInput.disabled = false;
             if (aiNameInput) aiNameInput.disabled = false;
-            // Re-enable ramp and win inputs when the match ends
+            // Re-enable ramp input when the match ends; win input stays fixed to 7
             if (rampInput) rampInput.disabled = false;
-            if (winInput) winInput.disabled = false;
+            if (winInput) { winInput.disabled = true; winInput.value = settings.winScore; }
             // Re-enable AI difficulty when the overall match ends
             if (aiDifficultyInput) aiDifficultyInput.disabled = false;
             // Re-enable extreme toggle when the overall match ends
@@ -595,9 +753,9 @@ function announceWinner(winner) {
     if (gameModeSelect) gameModeSelect.disabled = false;
     if (playerNameInput) playerNameInput.disabled = false;
     if (aiNameInput) aiNameInput.disabled = false;
-    // Re-enable ramp and win inputs when the one-shot game ends
+    // Re-enable ramp input when the one-shot game ends; win input stays fixed to 7
     if (rampInput) rampInput.disabled = false;
-    if (winInput) winInput.disabled = false;
+    if (winInput) { winInput.disabled = true; winInput.value = settings.winScore; }
     // Re-enable AI difficulty when the game ends in one-shot mode
     if (aiDifficultyInput) aiDifficultyInput.disabled = false;
     // Re-enable extreme toggle when the one-shot game ends
@@ -667,7 +825,7 @@ canvas.addEventListener('mousemove', function (evt) {
 // Start on click or space
 function startGame() {
     settings.rampSeconds = parseFloat(rampInput.value) || 10;
-    settings.winScore = parseInt(winInput.value, 10) || 10;
+    // settings.winScore is fixed to 7; do not read from UI
     settings.aiDifficulty = parseInt(aiDifficultyInput.value, 10) || 3;
     // read extreme mode at game start
     extremeMode = !!(extremeModeInput && extremeModeInput.checked);
@@ -690,9 +848,9 @@ function startGame() {
     settings.speedMultiplier = 1;
     accumulatedPlayTime = 0;
     startTimestamp = null;
-    // disable ramp and win inputs during active play
+    // disable ramp and win inputs during active play (win fixed to 7)
     if (rampInput) rampInput.disabled = true;
-    if (winInput) winInput.disabled = true;
+    if (winInput) { winInput.disabled = true; winInput.value = settings.winScore; }
     // disable AI difficulty while a game is active
     if (aiDifficultyInput) aiDifficultyInput.disabled = true;
     // disable extreme mode while a game is active
@@ -852,6 +1010,7 @@ function init() {
     window.addEventListener('resize', () => {
         resizeCanvas();
         applyUIScale();
+        anchorUIToCanvasHorizontal();
     });
     // Apply initial UI scale
     applyUIScale();
@@ -866,9 +1025,12 @@ function init() {
     if (aiDifficultyInput) aiDifficultyInput.disabled = false;
     if (extremeModeInput) extremeModeInput.disabled = false;
     if (rampInput) rampInput.disabled = false;
-    if (winInput) winInput.disabled = false;
+    if (winInput) { winInput.disabled = true; winInput.value = settings.winScore; }
     requestAnimationFrame(gameLoop);
 }
+
+// ensure initial horizontal anchoring after init
+anchorUIToCanvasHorizontal();
 
 function updatePowerupUI() {
     powerupLeftEl.textContent = powerupsDisabledByDifficulty ? '0' : powerupsLeft;
@@ -877,15 +1039,13 @@ function updatePowerupUI() {
     } else {
         powerupActiveEl.textContent = `Active: ${activePowerup ? activePowerup : '-'} `;
     }
-    if (systemMessage) {
-        if (extremeMode) {
-            systemMessage.classList.add('extreme');
-            systemMessage.textContent = 'EXTREME MODE ACTIVATED. ALL POWERUPS ARE DISABLED';
-        } else {
-            systemMessage.classList.remove('extreme');
-            systemMessage.textContent = powerupsDisabledByDifficulty ? 'Powerups disabled' : '';
-        }
+    if (extremeMode) {
+        showSystemMessage('EXTREME MODE ACTIVATED. ALL POWERUPS ARE DISABLED', true);
+    } else {
+        const msg = powerupsDisabledByDifficulty ? 'Powerups disabled' : '';
+        showSystemMessage(msg, false);
     }
+    // keep anchorUIToCanvas available but do not call it by default to preserve normal flow
 }
 
 function tryActivatePowerup(type) {
@@ -939,9 +1099,140 @@ if (restartBtn) {
         if (aiDifficultyInput) aiDifficultyInput.disabled = false;
         if (extremeModeInput) extremeModeInput.disabled = false;
         if (rampInput) rampInput.disabled = false;
-        if (winInput) winInput.disabled = false;
+    if (winInput) { winInput.disabled = true; winInput.value = settings.winScore; }
         // Keep matchEnded false so user may start via click/Space when ready
         matchEnded = false;
         showOverlay('Click or press Space to start');
     });
+}
+
+// Handle scoring with special deuce behavior (revert advantage loss back to 6-6)
+function handlePointScored(side) {
+    // side is 'player' or 'ai'
+    const target = settings.winScore; // should be 7
+    const other = side === 'player' ? 'ai' : 'player';
+    const prevPlayer = scores.player;
+    const prevAi = scores.ai;
+
+    // If we are in the deuce zone (both >= target-1) and currently someone has ADV
+    // and the trailing player scores, revert both back to target-1 (6-6) and
+    // increment the deuce counter.
+    if (prevPlayer >= target - 1 && prevAi >= target - 1) {
+        if (Math.abs(prevPlayer - prevAi) === 1) {
+            // someone had ADV
+            const adv = prevPlayer > prevAi ? 'player' : 'ai';
+            const trailing = adv === 'player' ? 'ai' : 'player';
+            if (side === trailing) {
+                // Advantage lost -> back to deuce (6-6)
+                scores.player = target - 1;
+                scores.ai = target - 1;
+                deuceCount += 1;
+                // reset last point state so future game/match points are re-counted
+                lastPointState = null;
+                updateScores();
+                return false; // game not ended
+            }
+        }
+    }
+
+    // Normal increment
+    scores[side] += 1;
+    updateScores();
+    // After updating scores, check for a game/match win
+    return checkWin();
+}
+
+// Smoothly show/replace the system message with optional 'extreme' styling.
+function showSystemMessage(text, extreme = false) {
+    if (!systemMessage) return;
+    // If text empty, hide message and collapse area
+    if (!text || text.trim() === '') {
+        systemMessage.classList.remove('extreme');
+        systemMessage.textContent = '';
+        setSystemAreaVisible(false);
+        return;
+    }
+    // show text; if extreme styling requested, add class
+    systemMessage.textContent = text;
+    if (extreme) systemMessage.classList.add('extreme'); else systemMessage.classList.remove('extreme');
+    // Make sure area is visible. For extreme messages we keep them visible without fade.
+    setSystemAreaVisible(true);
+    if (extreme) {
+        // make immediate visible without fade
+        systemMessage.style.transition = '';
+        systemMessage.style.opacity = '1';
+        return;
+    }
+    // For non-extreme messages use a fade in
+    systemMessage.style.transition = 'opacity 220ms ease';
+    systemMessage.style.opacity = '0';
+    requestAnimationFrame(() => { systemMessage.style.opacity = '1'; });
+}
+
+// Anchor header center, left and right panels to the canvas center (pixel-accurate)
+function anchorUIToCanvas() {
+    const canvasRect = canvas.getBoundingClientRect();
+    const centerX = canvasRect.left + canvasRect.width / 2;
+    // center-wrap should be horizontally centered on centerX
+    const centerWrap = document.querySelector('.center-wrap');
+    if (centerWrap) {
+        centerWrap.style.position = 'absolute';
+        centerWrap.style.left = (centerX - centerWrap.getBoundingClientRect().width / 2) + 'px';
+        centerWrap.style.top = (canvasRect.top - centerWrap.getBoundingClientRect().height - 8) + 'px';
+    }
+    // left-panel to the left of canvas center
+    const leftPanel = document.querySelector('.left-panel');
+    if (leftPanel) {
+        leftPanel.style.left = (centerX - canvasRect.width / 2 - leftPanel.getBoundingClientRect().width - 12) + 'px';
+        leftPanel.style.top = (canvasRect.top + 20) + 'px';
+    }
+    // right-panel to the right of canvas center
+    const rightPanel = document.querySelector('.right-panel');
+    if (rightPanel) {
+        rightPanel.style.left = (centerX + canvasRect.width / 2 + 12) + 'px';
+        rightPanel.style.top = (canvasRect.top + 20) + 'px';
+    }
+    // footer controls center under canvas horizontally
+    const controls = document.querySelector('footer .controls');
+    if (controls) {
+        controls.style.position = 'absolute';
+        controls.style.left = (centerX - controls.getBoundingClientRect().width / 2) + 'px';
+        controls.style.top = (canvasRect.bottom + 12) + 'px';
+    }
+}
+
+// Horizontal-only anchoring: shift UI elements horizontally so their horizontal centers
+// align relative to the canvas center without removing them from document flow vertically.
+function anchorUIToCanvasHorizontal() {
+    if (!canvas) return;
+    const canvasRect = canvas.getBoundingClientRect();
+    const canvasCenterX = canvasRect.left + canvasRect.width / 2;
+
+    const centerWrap = document.querySelector('.center-wrap');
+    if (centerWrap) {
+        const r = centerWrap.getBoundingClientRect();
+        const centerWrapCenterX = r.left + r.width / 2;
+        const shift = canvasCenterX - centerWrapCenterX;
+        centerWrap.style.transform = `translateX(${shift}px)`;
+    }
+
+    const leftPanel = document.querySelector('.left-panel');
+    if (leftPanel) {
+        const r = leftPanel.getBoundingClientRect();
+        // desired center: align left panel right edge to canvas left minus 12px gap
+        const desiredCenterX = canvasRect.left - 12 - (r.width / 2);
+        const currentCenterX = r.left + r.width / 2;
+        const shift = desiredCenterX - currentCenterX;
+        leftPanel.style.transform = `translateX(${shift}px)`;
+    }
+
+    const rightPanel = document.querySelector('.right-panel');
+    if (rightPanel) {
+        const r = rightPanel.getBoundingClientRect();
+        // desired center: align right panel left edge to canvas right plus 12px gap
+        const desiredCenterX = canvasRect.right + 12 + (r.width / 2);
+        const currentCenterX = r.left + r.width / 2;
+        const shift = desiredCenterX - currentCenterX;
+        rightPanel.style.transform = `translateX(${shift}px)`;
+    }
 }
