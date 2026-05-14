@@ -5,7 +5,18 @@ import { moveAI } from './ai.js';
 import { createPowerupState, tryActivatePowerup, getPowerupEffects, resetPowerupAfterPoint, resetPowerupForGame } from './powerups.js';
 import { createScoreState, resetScoreForNewGame, resetScoreForNewMatch, handlePointScored, getPointStatus, getAdvantage, isDeuce, WIN_SCORE, MATCH_FORMATS } from './scoring.js';
 import { draw } from './renderer.js';
-import { updateUI, updateScoreUI, updatePowerupUI, updateMatchModeUI, showOverlay, hideOverlay, applyUIScale, resizeCanvas } from './ui.js';
+
+// ─── Overlay helpers ──────────────────────────────────────────────────────────
+function showOverlay(text) {
+    const el  = document.getElementById('overlay');
+    const msg = document.getElementById('message');
+    if (msg) msg.textContent = text;
+    if (el)  el.style.display = 'flex';
+}
+function hideOverlay() {
+    const el = document.getElementById('overlay');
+    if (el)  el.style.display = 'none';
+}
 
 // ─── Canvas & context ───────────────────────────────────────────────────────
 const canvas = document.getElementById('pong');
@@ -68,8 +79,6 @@ const rampLabel        = document.getElementById('rampLabel');
 const extremeToggle    = document.getElementById('extremeMode');
 const trajToggle       = document.getElementById('trajToggle');
 const matchFormatBtns  = document.querySelectorAll('.match-format-btn');
-const overlay          = document.getElementById('overlay');
-const overlayMsg       = document.getElementById('message');
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function getPlayerName() { return playerNameInput?.value?.trim() || 'Player'; }
@@ -278,7 +287,7 @@ function refreshUI() {
     const playerScoreEl = document.getElementById('playerScore');
     const aiScoreEl     = document.getElementById('aiScore');
     if (playerScoreEl) {
-        playerScoreEl.textContent = (adv === 'player') ? 'ADV' : (adv === 'ai' && score.points.player === WIN_SCORE - 1) ? score.points.player : score.points.player;
+        playerScoreEl.textContent = (adv === 'player') ? 'ADV' : score.points.player;
     }
     if (aiScoreEl) {
         aiScoreEl.textContent = (adv === 'ai') ? 'ADV' : score.points.ai;
@@ -468,7 +477,7 @@ canvas.addEventListener('click', () => {
     if (!running && !score.matchEnded) startGame();
 });
 
-overlay?.addEventListener('click', (e) => {
+document.getElementById('overlay')?.addEventListener('click', (e) => {
     if (e.target?.id === 'restartBtn') return;
     if (!running && !score.matchEnded) startGame();
 });
