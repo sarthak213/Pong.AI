@@ -85,21 +85,27 @@ function getPlayerName() { return playerNameInput?.value?.trim() || 'Player'; }
 
 function doResizeCanvas() {
     const dpr = window.devicePixelRatio || 1;
-    const displayWidth  = Math.max(100, Math.floor(BASE_W * currentUIScale));
-    const displayHeight = Math.max(100, Math.floor(BASE_H * currentUIScale));
+    // Read the actual rendered size of the center panel (CSS drives it via aspect-ratio)
+    const panel = canvas.parentElement;
+    const cssW = panel ? Math.floor(panel.clientWidth)  : BASE_W;
+    const cssH = panel ? Math.floor(panel.clientHeight) : BASE_H;
+    const displayWidth  = Math.max(100, cssW);
+    const displayHeight = Math.max(60,  cssH);
 
-    if (canvas.width !== Math.floor(displayWidth * dpr) || canvas.height !== Math.floor(displayHeight * dpr)) {
-        const prevW = canvas.width || displayWidth * dpr;
-        const prevH = canvas.height || displayHeight * dpr;
+    const newW = Math.floor(displayWidth  * dpr);
+    const newH = Math.floor(displayHeight * dpr);
 
-        canvas.width  = Math.floor(displayWidth * dpr);
-        canvas.height = Math.floor(displayHeight * dpr);
-        canvas.style.width  = displayWidth + 'px';
-        canvas.style.height = displayHeight + 'px';
+    if (canvas.width !== newW || canvas.height !== newH) {
+        const prevW = canvas.width  || newW;
+        const prevH = canvas.height || newH;
+
+        canvas.width  = newW;
+        canvas.height = newH;
+        // Let CSS control visual size — don't set style.width/height, the CSS does it
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-        const scaleX = canvas.width / prevW;
-        const scaleY = canvas.height / prevH;
+        const scaleX = newW / prevW;
+        const scaleY = newH / prevH;
         if (ball) { ball.x *= scaleX; ball.y *= scaleY; }
         playerY *= scaleY;
         aiY     *= scaleY;
@@ -120,17 +126,8 @@ function doResizeCanvas() {
 }
 
 function doApplyUIScale() {
-    document.documentElement.style.setProperty('--ui-scale', '1');
-    const headerEl = document.querySelector('header');
-    const footerEl = document.querySelector('footer');
-    const headerH = headerEl ? headerEl.getBoundingClientRect().height : 0;
-    const footerH = footerEl ? footerEl.getBoundingClientRect().height : 0;
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    const totalNeeded = headerH + BASE_H + footerH + 32;
-    const scale = Math.min(1, Math.min(vw / BASE_W, vh / totalNeeded));
-    document.documentElement.style.setProperty('--ui-scale', String(scale));
-    currentUIScale = scale;
+    // No-op: layout is now CSS-driven (max-width container + aspect-ratio canvas).
+    // Kept so call sites don't error.
 }
 
 function resetPositions() {
@@ -541,12 +538,12 @@ function activatePowerup(type) {
     refreshUI();
 }
 
-// ─── Resize ───────────────────────────────────────────────────────────────────
-window.addEventListener('resize', () => {
-    doApplyUIScale();
+// ─── Resize — watch the center panel, not the window ────────────────────────
+const resizeObserver = new ResizeObserver(() => {
     doResizeCanvas();
     refreshUI();
 });
+resizeObserver.observe(canvas.parentElement);
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 (function init() {
