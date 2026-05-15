@@ -4,146 +4,178 @@
     <meta charset="UTF-8">
     <title>Pong.AI</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <div class="container">
+    <div class="app">
 
-        <!-- ── Header: brand + scoreboard + controls ── -->
-        <header>
-            <span class="brand">Pong.AI</span>
+        <!-- ── Header ─────────────────────────────────────────── -->
+        <header class="header">
+            <div class="header-brand">
+                <span class="brand-dot"></span>
+                <span class="brand-text">Pong.AI</span>
+            </div>
 
-            <div class="scoreboard-wrap">
-                <div class="scoreboard">
-
-                    <!-- Player side -->
-                    <div class="player-block" id="playerBlock">
-                        <input id="playerName" class="name-input" value="Player" maxlength="14" autocomplete="off" spellcheck="false">
-                        <div id="playerScore" class="score cyan">0</div>
+            <div class="scoreboard">
+                <!-- Player -->
+                <div class="player-col" id="playerCol">
+                    <input id="playerName" class="name-input" value="Player" maxlength="14" autocomplete="off" spellcheck="false">
+                    <div class="score-wrap">
+                        <div id="playerScore" class="score player-score">0</div>
+                    </div>
+                    <div class="col-meta">
                         <div class="game-dots" id="playerGames">
-                            <span class="game-dot" data-game="1"></span>
-                            <span class="game-dot" data-game="2"></span>
-                            <span class="game-dot" data-game="3"></span>
-                            <span class="game-dot" data-game="4"></span>
+                            <span class="game-dot"></span>
+                            <span class="game-dot"></span>
+                            <span class="game-dot"></span>
+                            <span class="game-dot"></span>
                         </div>
-                        <div id="playerStatus" class="player-status"></div>
+                        <div id="playerStatus" class="status-pill"></div>
                     </div>
-
-                    <div class="vs-col">
-                        <span class="vs">vs</span>
-                        <span class="game-number" id="gameNumber"></span>
-                    </div>
-
-                    <!-- AI side -->
-                    <div class="player-block" id="aiBlock">
-                        <span class="name-label">AI</span>
-                        <div id="aiScore" class="score orange">0</div>
-                        <div class="game-dots" id="aiGames">
-                            <span class="game-dot" data-game="1"></span>
-                            <span class="game-dot" data-game="2"></span>
-                            <span class="game-dot" data-game="3"></span>
-                            <span class="game-dot" data-game="4"></span>
-                        </div>
-                        <div id="aiStatus" class="player-status"></div>
-                    </div>
-
                 </div>
 
-                <!-- Deuce pill — centered below entire scoreboard, shown only during deuce -->
-                <div class="deuce-row">
-                    <span id="deuceStatus" class="deuce-pill" style="display:none;"></span>
+                <!-- Centre divider -->
+                <div class="score-divider">
+                    <span class="vs-label">VS</span>
+                    <span class="game-badge" id="gameNumber"></span>
+                    <div class="deuce-wrap">
+                        <span id="deuceStatus" class="deuce-pill" style="display:none;"></span>
+                    </div>
+                </div>
+
+                <!-- AI -->
+                <div class="player-col ai-col" id="aiCol">
+                    <span class="name-label ai-name">AI</span>
+                    <div class="score-wrap">
+                        <div id="aiScore" class="score ai-score">0</div>
+                    </div>
+                    <div class="col-meta">
+                        <div class="game-dots" id="aiGames">
+                            <span class="game-dot"></span>
+                            <span class="game-dot"></span>
+                            <span class="game-dot"></span>
+                            <span class="game-dot"></span>
+                        </div>
+                        <div id="aiStatus" class="status-pill"></div>
+                    </div>
                 </div>
             </div>
 
-            <div class="header-controls">
-                <button id="pauseBtn">Pause</button>
-                <button id="restartBtn" class="btn-accent">Restart</button>
+            <div class="header-actions">
+                <button id="pauseBtn" class="btn btn-ghost">
+                    <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                        <rect x="2" y="1.5" width="3.5" height="10" rx="1" fill="currentColor"/>
+                        <rect x="7.5" y="1.5" width="3.5" height="10" rx="1" fill="currentColor"/>
+                    </svg>
+                    <span id="pauseBtnLabel">Pause</span>
+                </button>
+                <button id="restartBtn" class="btn btn-primary">Restart</button>
             </div>
         </header>
 
-        <!-- ── Main three-column layout ── -->
-        <main class="three-column">
+        <!-- ── Main area ───────────────────────────────────────── -->
+        <main class="main">
 
-            <!-- Left panel: powerups + match info -->
-            <aside class="side-panel left-panel">
-                <div class="panel-card">
-                    <div class="panel-label">Powerups</div>
-                    <div class="pip-row" id="powerupLeft">
-                        <span class="pip pip-filled"></span>
-                        <span class="pip pip-filled"></span>
-                    </div>
-                    <div class="powerup-active" id="powerupActive">—</div>
-                    <div class="powerup-keys">
-                        <span class="key-hint"><kbd>W</kbd> Speed</span>
-                        <span class="key-hint"><kbd>D</kbd> Size</span>
-                    </div>
+            <!-- Left sidebar -->
+            <aside class="sidebar sidebar-left">
+                <div class="sidebar-section" id="extremePanel">
+                    <div class="section-label">Mode</div>
+                    <div class="mode-indicator" id="extremeStatusText">Normal</div>
                 </div>
-                <div class="panel-card" id="extremePanel">
-                    <div class="panel-label">Status</div>
-                    <div class="extreme-status-text" id="extremeStatusText">Normal</div>
+
+                <div class="sidebar-section">
+                    <div class="section-label">Powerups</div>
+                    <div class="pip-track" id="powerupLeft">
+                        <span class="pip pip-on"></span>
+                        <span class="pip pip-on"></span>
+                    </div>
+                    <div class="active-powerup" id="powerupActive">None active</div>
+                    <div class="key-row">
+                        <div class="key-item">
+                            <kbd>W</kbd>
+                            <span>Speed</span>
+                        </div>
+                        <div class="key-item">
+                            <kbd>D</kbd>
+                            <span>Size</span>
+                        </div>
+                    </div>
                 </div>
             </aside>
 
-            <!-- Centre: canvas + overlay -->
-            <section class="center-panel">
+            <!-- Canvas -->
+            <section class="arena">
                 <canvas id="pong" width="900" height="600"></canvas>
                 <div class="overlay" id="overlay">
-                    <div id="message" class="overlay-msg">Click or press Space to start</div>
-                    <button id="overlayRestart" style="display:none;">Restart</button>
+                    <p id="message" class="overlay-msg">Click or press Space to start</p>
                 </div>
             </section>
 
-            <!-- Right panel: AI settings -->
-            <aside class="side-panel right-panel">
-                <div class="panel-card">
-                    <div class="panel-label">AI difficulty</div>
-                    <div class="slider-row">
-                        <input id="aiDifficulty" type="range" min="1" max="5" value="3">
-                        <span class="slider-val" id="aiDiffLabel">3</span>
+            <!-- Right sidebar -->
+            <aside class="sidebar sidebar-right">
+                <div class="sidebar-section">
+                    <div class="section-label">AI Difficulty</div>
+                    <div class="slider-group">
+                        <input id="aiDifficulty" type="range" min="1" max="5" value="3" class="slider">
+                        <div class="slider-markers">
+                            <span>Easy</span>
+                            <span id="aiDiffLabel" class="slider-val">3</span>
+                            <span>Hard</span>
+                        </div>
                     </div>
                 </div>
-                <div class="panel-card">
-                    <div class="panel-label">Speed ramp</div>
-                    <div class="slider-row">
-                        <input id="rampTime" type="range" min="1" max="60" value="10">
-                        <span class="slider-val" id="rampLabel">10s</span>
+
+                <div class="sidebar-section">
+                    <div class="section-label">Speed Ramp</div>
+                    <div class="slider-group">
+                        <input id="rampTime" type="range" min="1" max="60" value="10" class="slider">
+                        <div class="slider-markers">
+                            <span>Fast</span>
+                            <span id="rampLabel" class="slider-val">10s</span>
+                            <span>Slow</span>
+                        </div>
                     </div>
                 </div>
-                <div class="panel-card">
-                    <div class="panel-label">Trajectory</div>
-                    <label class="toggle-switch">
-                        <input id="trajToggle" type="checkbox" checked>
-                        <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                        <span class="toggle-label" id="trajLabel">On</span>
-                    </label>
-                </div>
-                <div class="panel-card">
-                    <div class="panel-label">Extreme mode</div>
-                    <label class="toggle-switch">
-                        <input id="extremeMode" type="checkbox">
-                        <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                        <span class="toggle-label" id="extremeLabel">Off</span>
-                    </label>
+
+                <div class="sidebar-section toggles-section">
+                    <div class="toggle-row">
+                        <div>
+                            <div class="section-label">Trajectory</div>
+                        </div>
+                        <label class="toggle">
+                            <input id="trajToggle" type="checkbox" checked>
+                            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                        </label>
+                    </div>
+                    <div class="toggle-row">
+                        <div>
+                            <div class="section-label">Extreme</div>
+                        </div>
+                        <label class="toggle">
+                            <input id="extremeMode" type="checkbox">
+                            <span class="toggle-track extreme-track"><span class="toggle-thumb"></span></span>
+                        </label>
+                    </div>
                 </div>
             </aside>
 
         </main>
 
-        <!-- ── Footer: match format selector ── -->
-        <footer>
-            <div class="footer-inner">
-                <span class="footer-label">Match format</span>
-                <div class="format-tabs">
-                    <button class="match-format-btn" data-format="one">One-shot</button>
-                    <button class="match-format-btn active" data-format="best3">Best of 3</button>
-                    <button class="match-format-btn" data-format="best5">Best of 5</button>
-                    <button class="match-format-btn" data-format="best7">Best of 7</button>
-                </div>
+        <!-- ── Footer ─────────────────────────────────────────── -->
+        <footer class="footer">
+            <span class="footer-label">Format</span>
+            <div class="format-group">
+                <button class="fmt-btn" data-format="one">One-shot</button>
+                <button class="fmt-btn active" data-format="best3">Best of 3</button>
+                <button class="fmt-btn" data-format="best5">Best of 5</button>
+                <button class="fmt-btn" data-format="best7">Best of 7</button>
             </div>
         </footer>
 
     </div>
-
     <script type="module" src="main.js"></script>
 </body>
 </html>

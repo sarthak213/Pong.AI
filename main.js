@@ -74,7 +74,7 @@ const aiDiffLabel     = document.getElementById('aiDiffLabel');
 const rampLabel       = document.getElementById('rampLabel');
 const extremeToggle   = document.getElementById('extremeMode');
 const trajToggle      = document.getElementById('trajToggle');
-const matchFormatBtns = document.querySelectorAll('.match-format-btn');
+const matchFormatBtns = document.querySelectorAll('.fmt-btn');
 
 // ─── Canvas sizing ─────────────────────────────────────────────────────────────
 function doResizeCanvas() {
@@ -296,38 +296,43 @@ function refreshUI() {
     const deuce    = isDeuce(score);
     const ptStatus = getPointStatus(score);
 
+    // Scores
     const playerScoreEl = document.getElementById('playerScore');
     const aiScoreEl     = document.getElementById('aiScore');
     if (playerScoreEl) playerScoreEl.textContent = (adv === 'player') ? 'ADV' : score.points.player;
     if (aiScoreEl)     aiScoreEl.textContent     = (adv === 'ai')     ? 'ADV' : score.points.ai;
 
+    // Status pills under each score
     for (const who of ['player', 'ai']) {
         const st = ptStatus[who];
         const el = document.getElementById(`${who}Status`);
         if (!el) continue;
-        if (!st) { el.textContent = ''; el.className = 'player-status'; continue; }
+        if (!st) { el.textContent = ''; el.className = 'status-pill'; continue; }
         el.textContent = st.type === 'matchPoint'
             ? `Match point (${st.count})`
             : `Game point (${st.count})`;
-        el.className = 'player-status ' + (st.type === 'matchPoint' ? 'status-mp' : 'status-gp');
+        el.className = 'status-pill ' + (st.type === 'matchPoint' ? 'status-mp' : 'status-gp');
     }
 
+    // Deuce pill
     const deuceEl = document.getElementById('deuceStatus');
     if (deuceEl) {
         if (deuce) {
-            deuceEl.textContent   = `Deuce (#${score.deuceCount})`;
+            deuceEl.textContent   = score.deuceCount > 0 ? `Deuce #${score.deuceCount}` : 'Deuce';
             deuceEl.style.display = 'inline-flex';
         } else {
             deuceEl.style.display = 'none';
         }
     }
 
+    // Game dots
     for (const who of ['player', 'ai']) {
         document.querySelectorAll(`#${who}Games .game-dot`).forEach((dot, i) => {
             dot.classList.toggle('filled', i < score.gamesWon[who]);
         });
     }
 
+    // Game number badge
     const gameNumEl = document.getElementById('gameNumber');
     if (gameNumEl) {
         const fmt = MATCH_FORMATS[score.matchFormat];
@@ -336,38 +341,57 @@ function refreshUI() {
             : '';
     }
 
+    // Powerup pips — use new .pip-on class
     const puLeftEl   = document.getElementById('powerupLeft');
     const puActiveEl = document.getElementById('powerupActive');
     if (puLeftEl) {
         puLeftEl.innerHTML = [0, 1].map(i =>
-            `<span class="pip${(!extremeMode && i < powerup.left) ? ' pip-filled' : ''}"></span>`
+            `<span class="pip${(!extremeMode && i < powerup.left) ? ' pip-on' : ''}"></span>`
         ).join('');
     }
     if (puActiveEl) {
-        puActiveEl.textContent = powerup.disabled ? 'Disabled' : (powerup.active ?? '—');
-        puActiveEl.className   = 'powerup-active' +
-            (powerup.disabled ? ' disabled' : '') +
-            (powerup.active   ? ' active'   : '');
+        if (powerup.disabled) {
+            puActiveEl.textContent = 'Disabled';
+            puActiveEl.className   = 'active-powerup is-disabled';
+        } else if (powerup.active) {
+            puActiveEl.textContent = powerup.active;
+            puActiveEl.className   = 'active-powerup is-active';
+        } else {
+            puActiveEl.textContent = 'None active';
+            puActiveEl.className   = 'active-powerup';
+        }
     }
 
+    // Extreme panel
     const extremePanelEl    = document.getElementById('extremePanel');
     const extremeStatusText = document.getElementById('extremeStatusText');
     if (extremePanelEl)    extremePanelEl.classList.toggle('is-extreme', extremeMode);
     if (extremeStatusText) extremeStatusText.textContent = extremeMode ? 'EXTREME' : 'Normal';
 
-    const trajLabelEl    = document.getElementById('trajLabel');
-    const extremeLabelEl = document.getElementById('extremeLabel');
-    if (trajLabelEl)    trajLabelEl.textContent    = showTrajectory ? 'On' : 'Off';
-    if (extremeLabelEl) extremeLabelEl.textContent = extremeMode    ? 'On' : 'Off';
+    // Pause button — update icon label and class
+    if (pauseBtn) {
+        const lbl = document.getElementById('pauseBtnLabel');
+        if (lbl) lbl.textContent = isPaused ? 'Resume' : 'Pause';
+        pauseBtn.classList.toggle('paused', isPaused);
+        // Update SVG icon: show play icon when paused, pause icon when playing
+        const svgEl = pauseBtn.querySelector('svg');
+        if (svgEl) {
+            svgEl.innerHTML = isPaused
+                ? '<polygon points="3,1.5 11,6.5 3,11.5" fill="currentColor"/>'
+                : '<rect x="2" y="1.5" width="3.5" height="10" rx="1" fill="currentColor"/><rect x="7.5" y="1.5" width="3.5" height="10" rx="1" fill="currentColor"/>';
+        }
+    }
 
-    if (pauseBtn) pauseBtn.textContent = isPaused ? 'Resume' : 'Pause';
+    // Slider labels
     if (aiDiffLabel && aiDiffInput) aiDiffLabel.textContent = aiDiffInput.value;
     if (rampLabel   && rampInput)   rampLabel.textContent   = rampInput.value + 's';
 
+    // Format tabs — new class name .fmt-btn
     matchFormatBtns.forEach(btn => {
         btn.classList.toggle('active', btn.dataset.format === score.matchFormat);
     });
 
+    // Match dots visibility + count
     const playerGamesEl = document.getElementById('playerGames');
     const aiGamesEl     = document.getElementById('aiGames');
     const fmt        = MATCH_FORMATS[score.matchFormat];

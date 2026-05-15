@@ -1,4 +1,4 @@
-// renderer.js — all canvas drawing
+// renderer.js — canvas drawing with deep-space aesthetic
 
 import { buildTrajectorySegments } from './ai.js';
 
@@ -7,37 +7,106 @@ export function draw(ctx, canvas, {
     PADDLE_HEIGHT_current, BALL_RADIUS, showTrajectory
 }) {
     const dpr      = window.devicePixelRatio || 1;
-    const displayW = canvas.width  / dpr;
-    const displayH = canvas.height / dpr;
+    const W        = canvas.width  / dpr;
+    const H        = canvas.height / dpr;
 
-    ctx.fillStyle = '#181d23';
-    ctx.fillRect(0, 0, displayW, displayH);
+    // ── Background ──────────────────────────────────────────
+    ctx.fillStyle = '#090c10';
+    ctx.fillRect(0, 0, W, H);
 
-    drawNet(ctx, displayW, displayH);
+    // Subtle inner vignette
+    const vignette = ctx.createRadialGradient(W/2, H/2, H*0.2, W/2, H/2, H*0.85);
+    vignette.addColorStop(0, 'rgba(0,0,0,0)');
+    vignette.addColorStop(1, 'rgba(0,0,0,0.35)');
+    ctx.fillStyle = vignette;
+    ctx.fillRect(0, 0, W, H);
 
+    // ── Centre line ─────────────────────────────────────────
+    drawCentreLine(ctx, W, H);
+
+    // ── Trajectory ──────────────────────────────────────────
     if (showTrajectory && ball.vx > 0) {
-        drawTrajectory(ctx, ball, BALL_RADIUS, AI_X, displayH);
+        drawTrajectory(ctx, ball, BALL_RADIUS, AI_X, H);
     }
 
-    drawRoundedRect(ctx, PLAYER_X, playerY, PADDLE_WIDTH, PADDLE_HEIGHT_current, 3, '#00adb5');
-    drawRoundedRect(ctx, AI_X,     aiY,     PADDLE_WIDTH, PADDLE_HEIGHT,         3, '#f96d00');
+    // ── Paddles ──────────────────────────────────────────────
+    drawPaddle(ctx, PLAYER_X, playerY, PADDLE_WIDTH, PADDLE_HEIGHT_current, '#00d4e0', H);
+    drawPaddle(ctx, AI_X,     aiY,     PADDLE_WIDTH, PADDLE_HEIGHT,         '#ff7c2a', H);
 
-    ctx.fillStyle = '#fafafa';
-    ctx.beginPath();
-    ctx.arc(ball.x, ball.y, BALL_RADIUS, 0, Math.PI * 2);
-    ctx.closePath();
-    ctx.fill();
+    // ── Ball ─────────────────────────────────────────────────
+    drawBall(ctx, ball, BALL_RADIUS);
 }
 
-function drawNet(ctx, displayW, displayH) {
-    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([12, 8]);
+function drawCentreLine(ctx, W, H) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([6, 10]);
+    ctx.lineDashOffset = 0;
     ctx.beginPath();
-    ctx.moveTo(displayW / 2, 0);
-    ctx.lineTo(displayW / 2, displayH);
+    ctx.moveTo(W / 2, 0);
+    ctx.lineTo(W / 2, H);
     ctx.stroke();
     ctx.setLineDash([]);
+    ctx.restore();
+}
+
+function drawPaddle(ctx, x, y, w, h, color, displayH) {
+    ctx.save();
+
+    // Glow beneath
+    const glow = ctx.createRadialGradient(x + w/2, y + h/2, 0, x + w/2, y + h/2, h * 0.9);
+    glow.addColorStop(0, color + '33');
+    glow.addColorStop(1, 'transparent');
+    ctx.fillStyle = glow;
+    ctx.fillRect(x - h*0.4, y - h*0.2, w + h*0.8, h*1.4);
+
+    // Paddle body with rounded rect
+    ctx.beginPath();
+    roundRect(ctx, x, y, w, h, Math.min(w/2, 4));
+    // Gradient fill: slightly lighter at top
+    const grad = ctx.createLinearGradient(x, y, x, y + h);
+    grad.addColorStop(0, lighten(color, 0.15));
+    grad.addColorStop(1, color);
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // Bright edge highlight
+    ctx.beginPath();
+    roundRect(ctx, x, y, w, h, Math.min(w/2, 4));
+    ctx.strokeStyle = lighten(color, 0.3) + 'cc';
+    ctx.lineWidth = 0.5;
+    ctx.stroke();
+
+    ctx.restore();
+}
+
+function drawBall(ctx, ball, r) {
+    ctx.save();
+
+    // Motion trail glow
+    const trailGrad = ctx.createRadialGradient(ball.x, ball.y, 0, ball.x, ball.y, r * 3.5);
+    trailGrad.addColorStop(0, 'rgba(230,240,255,0.12)');
+    trailGrad.addColorStop(1, 'transparent');
+    ctx.fillStyle = trailGrad;
+    ctx.beginPath();
+    ctx.arc(ball.x, ball.y, r * 3.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Ball body
+    const ballGrad = ctx.createRadialGradient(
+        ball.x - r * 0.3, ball.y - r * 0.3, r * 0.05,
+        ball.x, ball.y, r
+    );
+    ballGrad.addColorStop(0, '#ffffff');
+    ballGrad.addColorStop(0.6, '#d8e8f8');
+    ballGrad.addColorStop(1, '#9ab8d8');
+    ctx.fillStyle = ballGrad;
+    ctx.beginPath();
+    ctx.arc(ball.x, ball.y, r, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
 }
 
 function drawTrajectory(ctx, ball, ballRadius, aiX, displayH) {
@@ -45,35 +114,40 @@ function drawTrajectory(ctx, ball, ballRadius, aiX, displayH) {
     if (!segments.length) return;
 
     ctx.save();
-    ctx.strokeStyle = 'rgba(249,109,0,0.25)';
-    ctx.lineWidth   = 1.5;
-    ctx.setLineDash([5, 6]);
+
+    // Gradient along the trajectory: fades out toward the AI
+    const first = segments[0];
+    const last  = segments[segments.length - 1];
+    const lineGrad = ctx.createLinearGradient(first.x1, first.y1, last.x2, last.y2);
+    lineGrad.addColorStop(0, 'rgba(255,124,42,0.5)');
+    lineGrad.addColorStop(1, 'rgba(255,124,42,0.08)');
+
+    ctx.strokeStyle = lineGrad;
+    ctx.lineWidth   = 1;
+    ctx.setLineDash([4, 7]);
     ctx.lineCap     = 'round';
     ctx.beginPath();
-    for (let i = 0; i < segments.length; i++) {
-        const s = segments[i];
+    segments.forEach((s, i) => {
         if (i === 0) ctx.moveTo(s.x1, s.y1);
         ctx.lineTo(s.x2, s.y2);
-    }
+    });
     ctx.stroke();
 
-    const last = segments[segments.length - 1];
+    // Contact point dot
     ctx.setLineDash([]);
-    ctx.fillStyle = 'rgba(249,109,0,0.5)';
+    ctx.fillStyle = 'rgba(255,124,42,0.6)';
     ctx.beginPath();
-    ctx.arc(last.x2, last.y2, 4, 0, Math.PI * 2);
+    ctx.arc(last.x2, last.y2, 3, 0, Math.PI * 2);
     ctx.fill();
+
     ctx.restore();
 }
 
-// FIX #10: fallback for browsers without ctx.roundRect (Safari < 15.4).
-function drawRoundedRect(ctx, x, y, w, h, r, color) {
-    ctx.fillStyle = color;
-    ctx.beginPath();
+// ── Helpers ───────────────────────────────────────────────────
+function roundRect(ctx, x, y, w, h, r) {
     if (typeof ctx.roundRect === 'function') {
         ctx.roundRect(x, y, w, h, r);
     } else {
-        // Manual arcTo fallback
         ctx.moveTo(x + r, y);
         ctx.lineTo(x + w - r, y);
         ctx.arcTo(x + w, y,     x + w, y + r,     r);
@@ -85,5 +159,13 @@ function drawRoundedRect(ctx, x, y, w, h, r, color) {
         ctx.arcTo(x,     y,     x + r, y,         r);
         ctx.closePath();
     }
-    ctx.fill();
+}
+
+function lighten(hex, amt) {
+    // Simple hex lighten — amt 0..1
+    const n = parseInt(hex.replace('#',''), 16);
+    const r = Math.min(255, ((n >> 16) & 0xff) + Math.round(255 * amt));
+    const g = Math.min(255, ((n >> 8)  & 0xff) + Math.round(255 * amt));
+    const b = Math.min(255, ( n        & 0xff) + Math.round(255 * amt));
+    return '#' + [r, g, b].map(v => v.toString(16).padStart(2,'0')).join('');
 }
