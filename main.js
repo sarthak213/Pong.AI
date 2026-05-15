@@ -4,7 +4,8 @@ import { createBall, clamp, sweptPaddleCollision, collidesWithPaddle, handlePadd
 import { moveAI } from './ai.js';
 import { createPowerupState, tryActivatePowerup, getPowerupEffects, resetPowerupAfterPoint, resetPowerupForGame } from './powerups.js';
 import { createScoreState, resetScoreForNewGame, resetScoreForNewMatch, handlePointScored, getPointStatus, getAdvantage, isDeuce, WIN_SCORE, MATCH_FORMATS } from './scoring.js';
-import { draw } from './renderer.js';
+import { draw, setRendererTheme } from './renderer.js';
+import { THEMES, THEME_ORDER, applyThemeCSS } from './themes.js';
 
 // ─── Overlay helpers ───────────────────────────────────────────────────────────
 function showOverlay(text) {
@@ -75,6 +76,20 @@ const rampLabel       = document.getElementById('rampLabel');
 const extremeToggle   = document.getElementById('extremeMode');
 const trajToggle      = document.getElementById('trajToggle');
 const matchFormatBtns = document.querySelectorAll('.fmt-btn');
+const themeBtns       = document.querySelectorAll('.theme-btn');
+
+// ─── Theme state ───────────────────────────────────────────────────────────────
+let currentTheme = 'neon';
+
+function applyTheme(themeId) {
+    if (!THEMES[themeId]) return;
+    currentTheme = themeId;
+    applyThemeCSS(themeId);
+    setRendererTheme(themeId);
+    themeBtns.forEach(b => b.classList.toggle('active', b.dataset.theme === themeId));
+    // Persist to localStorage so it survives page reloads
+    try { localStorage.setItem('pongai-theme', themeId); } catch {}
+}
 
 // ─── Canvas sizing ─────────────────────────────────────────────────────────────
 function doResizeCanvas() {
@@ -578,6 +593,10 @@ matchFormatBtns.forEach(btn => {
     });
 });
 
+themeBtns.forEach(btn => {
+    btn.addEventListener('click', () => applyTheme(btn.dataset.theme));
+});
+
 // ─── Powerup activation ────────────────────────────────────────────────────────
 function activatePowerup(type) {
     const newState = tryActivatePowerup(type, powerup, { running });
@@ -592,6 +611,11 @@ function activatePowerup(type) {
 
 // ─── Init ──────────────────────────────────────────────────────────────────────
 (function init() {
+    // Restore saved theme (fallback to 'neon')
+    let savedTheme = 'neon';
+    try { savedTheme = localStorage.getItem('pongai-theme') || 'neon'; } catch {}
+    applyTheme(savedTheme);
+
     doResizeCanvas();
     ball = newBall();
     resetPositions();

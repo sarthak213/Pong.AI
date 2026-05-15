@@ -631,3 +631,97 @@ kbd {
    CANVAS BACKGROUND (drawn by renderer, but set page bg)
    ═══════════════════════════════════════════════════════════ */
 /* Renderer draws onto a dark surface — handled in renderer.js */
+
+/* ═══════════════════════════════════════════════════════════
+   THEME PICKER
+   ═══════════════════════════════════════════════════════════ */
+.footer-sep {
+    width: 1px;
+    height: 18px;
+    background: var(--border-mid);
+    margin: 0 2px;
+    flex-shrink: 0;
+}
+
+.theme-group {
+    display: flex;
+    gap: 5px;
+}
+
+.theme-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: var(--r-sm);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-2);
+    font-family: var(--font);
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    white-space: nowrap;
+}
+.theme-btn:hover:not(:disabled) {
+    background: var(--surface-hover);
+    color: var(--text);
+    border-color: var(--border-mid);
+}
+.theme-btn.active {
+    background: var(--cyan-dim);
+    color: var(--cyan);
+    border-color: var(--cyan-glow);
+    font-weight: 600;
+}
+
+.theme-swatch {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    /* Split circle: left half = player colour, right half = AI colour */
+    background: linear-gradient(to right, var(--a) 50%, var(--b) 50%);
+    border: 1px solid rgba(255,255,255,0.12);
+    flex-shrink: 0;
+}
+
+/* ── Arctic theme light-mode overrides ─────────────────────── */
+[data-theme="arctic"] body,
+[data-theme="arctic"] .app { background: var(--bg); }
+[data-theme="arctic"] .sidebar-section { background: rgba(0,0,0,0.04); }
+[data-theme="arctic"] kbd { background: rgba(0,0,0,0.06); border-color: rgba(0,0,0,0.14); color: var(--text); }
+[data-theme="arctic"] .overlay-msg { background: rgba(240,248,255,0.88); color: var(--text); border-color: rgba(0,100,200,0.15); }
+[data-theme="arctic"] #pong { border-color: rgba(0,100,200,0.15); box-shadow: 0 4px 24px rgba(0,80,160,0.1); }
+[data-theme="arctic"] .format-group,
+[data-theme="arctic"] .theme-group { background: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.1); }
+[data-theme="arctic"] .fmt-btn,
+[data-theme="arctic"] .theme-btn { color: var(--text-2); }
+[data-theme="arctic"] .btn-ghost { color: var(--text-2); background: rgba(0,0,0,0.05); }
+[data-theme="arctic"] .brand-text { color: var(--text); }
+[data-theme="arctic"] .header { border-bottom-color: rgba(0,0,0,0.1); }
+[data-theme="arctic"] .footer { border-top-color: rgba(0,0,0,0.1); }
+[data-theme="arctic"] .slider { background: rgba(0,0,0,0.12); }
+[data-theme="arctic"] .toggle-track { background: rgba(0,0,0,0.1); border-color: rgba(0,0,0,0.12); }
+[data-theme="arctic"] .brand-dot { background: var(--cyan); box-shadow: 0 0 8px var(--cyan); animation: none; }
+
+/* ── Synthwave extra glow on canvas ────────────────────────── */
+[data-theme="synthwave"] #pong {
+    box-shadow:
+        0 0 0 1px rgba(224,64,251,0.08),
+        0 8px 40px rgba(0,0,0,0.6),
+        0 0 60px rgba(100,0,150,0.15);
+}
+[data-theme="synthwave"] .brand-dot {
+    background: #e040fb;
+    box-shadow: 0 0 10px #e040fb, 0 0 22px rgba(224,64,251,0.4);
+}
+
+/* ── Retro: monochrome UI hints ────────────────────────────── */
+[data-theme="retro"] .brand-dot { background: #fff; box-shadow: none; animation: none; }
+[data-theme="retro"] .player-score { color: #fff; text-shadow: none; }
+[data-theme="retro"] .ai-score { color: #aaa; text-shadow: none; }
+[data-theme="retro"] #pong { box-shadow: none; border-color: rgba(255,255,255,0.1); }
+[data-theme="retro"] .fmt-btn.active { background: rgba(255,255,255,0.08); color: #fff; border-color: rgba(255,255,255,0.2); }
+[data-theme="retro"] .theme-btn.active { background: rgba(255,255,255,0.08); color: #fff; border-color: rgba(255,255,255,0.2); }
