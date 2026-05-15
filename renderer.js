@@ -4,32 +4,24 @@ import { buildTrajectorySegments } from './ai.js';
 
 export function draw(ctx, canvas, {
     ball, playerY, aiY, PLAYER_X, AI_X, PADDLE_WIDTH, PADDLE_HEIGHT,
-    PADDLE_HEIGHT_current, BALL_RADIUS, showTrajectory, extremeMode,
-    aiSpeedMultiplier, gameplayScale
+    PADDLE_HEIGHT_current, BALL_RADIUS, showTrajectory
 }) {
-    const dpr = window.devicePixelRatio || 1;
-    const displayW = canvas.width / dpr;
+    const dpr      = window.devicePixelRatio || 1;
+    const displayW = canvas.width  / dpr;
     const displayH = canvas.height / dpr;
 
-    // Background
     ctx.fillStyle = '#181d23';
     ctx.fillRect(0, 0, displayW, displayH);
 
-    // Net
     drawNet(ctx, displayW, displayH);
 
-    // Trajectory visualizer
     if (showTrajectory && ball.vx > 0) {
         drawTrajectory(ctx, ball, BALL_RADIUS, AI_X, displayH);
     }
 
-    // Player paddle
     drawRoundedRect(ctx, PLAYER_X, playerY, PADDLE_WIDTH, PADDLE_HEIGHT_current, 3, '#00adb5');
+    drawRoundedRect(ctx, AI_X,     aiY,     PADDLE_WIDTH, PADDLE_HEIGHT,         3, '#f96d00');
 
-    // AI paddle
-    drawRoundedRect(ctx, AI_X, aiY, PADDLE_WIDTH, PADDLE_HEIGHT, 3, '#f96d00');
-
-    // Ball
     ctx.fillStyle = '#fafafa';
     ctx.beginPath();
     ctx.arc(ball.x, ball.y, BALL_RADIUS, 0, Math.PI * 2);
@@ -54,9 +46,9 @@ function drawTrajectory(ctx, ball, ballRadius, aiX, displayH) {
 
     ctx.save();
     ctx.strokeStyle = 'rgba(249,109,0,0.25)';
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth   = 1.5;
     ctx.setLineDash([5, 6]);
-    ctx.lineCap = 'round';
+    ctx.lineCap     = 'round';
     ctx.beginPath();
     for (let i = 0; i < segments.length; i++) {
         const s = segments[i];
@@ -65,7 +57,6 @@ function drawTrajectory(ctx, ball, ballRadius, aiX, displayH) {
     }
     ctx.stroke();
 
-    // Endpoint marker on AI paddle
     const last = segments[segments.length - 1];
     ctx.setLineDash([]);
     ctx.fillStyle = 'rgba(249,109,0,0.5)';
@@ -75,9 +66,24 @@ function drawTrajectory(ctx, ball, ballRadius, aiX, displayH) {
     ctx.restore();
 }
 
+// FIX #10: fallback for browsers without ctx.roundRect (Safari < 15.4).
 function drawRoundedRect(ctx, x, y, w, h, r, color) {
     ctx.fillStyle = color;
     ctx.beginPath();
-    ctx.roundRect(x, y, w, h, r);
+    if (typeof ctx.roundRect === 'function') {
+        ctx.roundRect(x, y, w, h, r);
+    } else {
+        // Manual arcTo fallback
+        ctx.moveTo(x + r, y);
+        ctx.lineTo(x + w - r, y);
+        ctx.arcTo(x + w, y,     x + w, y + r,     r);
+        ctx.lineTo(x + w, y + h - r);
+        ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+        ctx.lineTo(x + r, y + h);
+        ctx.arcTo(x,     y + h, x,     y + h - r, r);
+        ctx.lineTo(x,     y + r);
+        ctx.arcTo(x,     y,     x + r, y,         r);
+        ctx.closePath();
+    }
     ctx.fill();
 }
