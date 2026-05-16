@@ -109,23 +109,15 @@ function drawPaddle(ctx, x, y, w, h, color) {
         ctx.shadowBlur = 0;
 
     } else {
-        // Neon / synthwave: glow bloom + gradient body + edge highlight
-        // Bloom
-        const glow = ctx.createRadialGradient(x + w/2, y + h/2, 0, x + w/2, y + h/2, h * 1.1);
-        glow.addColorStop(0, color + '44');
-        glow.addColorStop(1, 'transparent');
-        ctx.fillStyle = glow;
-        ctx.fillRect(x - h*0.5, y - h*0.25, w + h, h*1.5);
-
-        // Body gradient
+        // Neon / synthwave: gradient body + subtle edge highlight, no bloom
         const grad = ctx.createLinearGradient(x, y, x, y + h);
         grad.addColorStop(0, lighten(color, 0.18));
         grad.addColorStop(1, color);
         ctx.fillStyle = grad;
         ctx.beginPath(); roundRect(ctx, x, y, w, h, r); ctx.fill();
 
-        // Edge highlight
-        ctx.strokeStyle = lighten(color, 0.35) + 'bb';
+        // Thin bright edge highlight
+        ctx.strokeStyle = lighten(color, 0.4) + '99';
         ctx.lineWidth   = 0.75;
         ctx.beginPath(); roundRect(ctx, x, y, w, h, r); ctx.stroke();
     }

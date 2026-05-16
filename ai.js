@@ -1,51 +1,50 @@
-// ai.js — AI paddle movement and targeting logic
+// ai.js — AI paddle movement with difficulty-driven parameters and fatigue
 
 import { clamp, predictBallAtX } from './physics.js';
+import { DIFFICULTY, getFatigue, applyFatigue } from './difficulty.js';
 
-// FIX #8: target expressed as top-edge coordinate (same system as aiY),
-// clamped to [0, displayH - paddleH] to match the final aiY clamp.
-export function moveAI({ aiY, ball, ballRadius, paddleH, paddleW, aiX, displayH, displayW,
-    aiDifficulty, aiSpeedMultiplier, extremeMode, playerY, playerPaddleH,
-    gameplayScale, dt }) {
+// rallyHits is passed in from main.js (incremented on each paddle hit, reset on point).
+export function moveAI({ aiY, ball, ballRadius, paddleH, aiX, displayH,
+    difficulty, extremeMode, playerY, playerPaddleH, aiSpeedMultiplier,
+    gameplayScale, dt, rallyHits }) {
 
-    let targetTopEdge; // top-edge Y that AI wants its paddle at
+    const cfg = extremeMode
+        ? DIFFICULTY.extreme
+        : (DIFFICULTY[difficulty] ?? DIFFICULTY[3]);
 
-    if (extremeMode && ball.vx > 0) {
+    // ── Fatigue ────────────────────────────────────────────────
+    const fatigue = getFatigue(cfg, rallyHits);
+    const effBlend     = applyFatigue(cfg.blendFactor, fatigue, cfg.fatigueDepth);
+    const effAggression = applyFatigue(cfg.aggression,  fatigue, cfg.fatigueDepth);
+    const effMaxSpeed   = applyFatigue(cfg.aiMaxSpeed,  fatigue, cfg.fatigueDepth);
+
+    // ── Target calculation ─────────────────────────────────────
+    let targetTopEdge;
+
+    if (cfg.extremeAim && ball.vx > 0) {
         const { y: predictedY } = predictBallAtX(ball, ballRadius, aiX, displayH);
         const playerCenter = playerY + playerPaddleH / 2;
-        const aimUp = playerCenter > predictedY ? 1 : -1;
-        const desiredNorm = 0.95 * aimUp;
-        // Desired paddle centre → convert to top edge
+        const aimDir = playerCenter > predictedY ? 1 : -1;
+        // Apply fatigue to the aim precision — fatigued AI aims less aggressively
+        const aimNorm = applyFatigue(0.92, fatigue, cfg.fatigueDepth);
         const desiredCentre = clamp(
-            predictedY + desiredNorm * (paddleH / 2),
+            predictedY + aimDir * aimNorm * (paddleH / 2),
             paddleH / 2,
             displayH - paddleH / 2
         );
         targetTopEdge = desiredCentre - paddleH / 2;
     } else {
         const { y: predictedY } = predictBallAtX(ball, ballRadius, aiX, displayH);
-        const blendFactor = (aiDifficulty - 1) / 4; // 0=easy, 1=hard
-        // Blend between tracking live ball Y and predicted contact Y
-        const targetCentre = ball.y + (predictedY - ball.y) * blendFactor + ball.vy * (4 + aiDifficulty * 2);
-        // Convert centre target to top-edge, clamped correctly
+        // effBlend reduced by fatigue — AI increasingly tracks live ball over prediction
+        const targetCentre = ball.y * (1 - effBlend) + predictedY * effBlend;
         targetTopEdge = clamp(targetCentre - paddleH / 2, 0, displayH - paddleH);
     }
 
-    // Speed: scales with difficulty and game speed
-    const deadzone = extremeMode ? 2 : 4;
-    const aiBase     = (2 + aiDifficulty * 1.5) * gameplayScale * (extremeMode ? 5.0 : 1.0);
-    const aiSpeedMax = (extremeMode ? 140 : 18) * gameplayScale;
-    const frameScale = extremeMode ? 2.5 : 1.0;
-    // Note: speedMultiplier removed from AI — the ball's actual vx/vy already
-    // encode speed so the prediction naturally accounts for fast balls.
-    const rawSpeed  = clamp(aiBase * aiSpeedMultiplier, 3 * gameplayScale, aiSpeedMax);
-    const maxMove   = rawSpeed * (dt / (1000 / 60)) * frameScale;
-
+    // ── Movement ───────────────────────────────────────────────
     const delta = targetTopEdge - aiY;
-    if (Math.abs(delta) > deadzone) {
-        const aggression = extremeMode ? 1.2 : 0.14;
-        const scale      = extremeMode ? 3.0 : 1.0;
-        const move = clamp(delta * aggression, -maxMove * scale, maxMove * scale);
+    if (Math.abs(delta) > cfg.deadzone) {
+        const maxMove = effMaxSpeed * gameplayScale * aiSpeedMultiplier * (dt / (1000 / 60));
+        const move    = clamp(delta * effAggression, -maxMove, maxMove);
         aiY += move;
     }
 
@@ -62,9 +61,8 @@ export function buildTrajectorySegments(ball, ballRadius, aiX, displayH, maxSegm
     let count = 0;
 
     while (x < aiX && count < maxSegments) {
-        const distX = aiX - x;
-        const t     = distX / vx;
-        const newY  = y + vy * t;
+        const t    = (aiX - x) / vx;
+        const newY = y + vy * t;
 
         if (newY < ballRadius) {
             const tTop = (ballRadius - y) / vy;

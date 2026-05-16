@@ -1,6 +1,6 @@
 # Pong.AI
 
-A modern single-player browser Pong game with configurable AI, powerups, multiple match formats, and a trajectory visualizer.
+A modern single-player browser Pong game with configurable AI, powerups, multiple match formats, a trajectory visualizer, and four selectable visual themes.
 
 🎮 **Play here → [Pong.AI on GitHub Pages](https://sarthak213.github.io/Pong.AI/)**
 
@@ -8,18 +8,18 @@ A modern single-player browser Pong game with configurable AI, powerups, multipl
 
 ## File structure
 
-The original single-file `script.js` has been split into focused ES modules:
-
-``` text
+```text
 PONG.AI/
 ├── index.html      — UI layout: scoreboard, panels, canvas, footer
-├── styles.css      — Dark theme, viewport-fitted no-scroll layout
+├── styles.css      — Theme-aware styles, viewport-fitted no-scroll layout, grid alignment
 ├── main.js         — Orchestrator: game loop, input, resize, state management
-├── physics.js      — Ball creation, swept collision, movement, wall bounce, trajectory prediction
-├── ai.js           — AI paddle targeting and trajectory segment builder
+├── physics.js      — Ball creation, asymptotic speed ramp, swept collision, prediction
+├── ai.js           — AI paddle targeting with fatigue system and trajectory builder
+├── difficulty.js   — Per-level parameters: speed, AI behaviour, and fatigue config
 ├── powerups.js     — Powerup state, activation, per-point and per-game resets
-├── scoring.js      — Point scoring, deuce rules, game/match win detection, counters
-├── renderer.js     — Canvas drawing: paddles, ball, net, trajectory line
+├── scoring.js      — Point scoring, deuce rules, game/match win detection, win order
+├── renderer.js     — Theme-aware canvas drawing: paddles, ball, net, trajectory
+├── themes.js       — Four theme definitions and CSS variable application
 ├── LICENSE
 └── README.md
 ```
@@ -50,14 +50,14 @@ The GitHub Pages deployment at `https://sarthak213.github.io/Pong.AI/` always se
 
 - Standard Pong: player paddle on the left, AI on the right. Ball serves from centre.
 - A point is scored when the opponent fails to return the ball.
-- First player to reach **7 points** wins the game. Win score is fixed and not configurable.
+- First player to reach **7 points** wins the game. Win score is fixed.
 - **Deuce rules apply** when both players reach 6–6: a two-point lead is then required to win the game. Deuce can repeat indefinitely.
 
 ---
 
 ## Match formats
 
-Select via the tab strip in the footer. Locked once a game starts; re-enabled on Restart.
+Select via the Format tab strip in the footer. Locked once a game starts; re-enabled on Restart.
 
 | Format | Games needed to win |
 | --- | --- |
@@ -66,19 +66,22 @@ Select via the tab strip in the footer. Locked once a game starts; re-enabled on
 | Best of 5 | First to win 3 games |
 | Best of 7 | First to win 4 games |
 
-Game dots in the scoreboard track wins per player and automatically show/hide based on the selected format.
-
 ---
 
 ## Scoreboard
 
-The header scoreboard updates live with the following indicators:
+The scoreboard is centred at the top, directly above the canvas. All elements align to the canvas column edges.
 
 - **Score** — shows the current point count, or `ADV` when a player has advantage during deuce.
 - **Game point (n)** — appears under a player's score when they are one point from winning the game. `n` is the cumulative count of times that player has reached game point this game (tennis-style).
 - **Match point (n)** — same, but when winning this point would also win the match.
-- **Deuce (#n)** — a pill centred below both scores, shown only while deuce is active. `#n` is the number of times deuce has been reached in the current game, starting from 1 on the first 6–6.
-- **Game dots** — filled circles below each score indicate games won in the current match.
+- **Deuce (#n)** — a pill centred below both scores, shown only while deuce is active. `#n` is the deuce count for the current game, starting at 1 on the first 6–6.
+
+Both game point and match point pills are fully suppressed during deuce and advantage states — the `ADV` score display is sufficient.
+
+### Shared match track
+
+When a multi-game format is selected, a row of dots appears centred below the scores. Each dot represents one possible game in the series. As games are won they fill in chronologically in the winner's colour — player colour for player wins, AI colour for AI wins. Dot colours follow the active theme. The track shows/hides automatically based on format and resets on Restart.
 
 The player name is editable (up to 14 characters) before a game starts and locks during play. The AI name is fixed.
 
@@ -96,7 +99,7 @@ The player name is editable (up to 14 characters) before a game starts and locks
 | Speed powerup | **W** key (during a running point) |
 | Size powerup | **D** key (during a running point) |
 
-Powerup keys are ignored when an input field is focused.
+Powerup keys are ignored when a text input is focused.
 
 ---
 
@@ -115,27 +118,95 @@ Remaining uses are shown as pip dots in the left panel. Active powerup name is s
 
 ---
 
-## AI settings
+## AI difficulty
 
-Both settings are on the right panel, locked during active play, and re-enabled on Restart.
+The difficulty slider (1–5) is on the right panel. It is locked during active play and re-enabled on Restart. When Extreme mode is on the slider is disabled and visually dimmed — the slider value is irrelevant in Extreme mode and the label never shows "Extreme".
 
-**AI difficulty (1–5)** — controls how accurately the AI predicts the ball's contact point and how fast its paddle moves. At difficulty 1 the AI mostly tracks the current ball position; at 5 it fully predicts the bounced trajectory. The difficulty also determines how quickly the speed ramp advances — higher difficulty compresses the ramp so the ball reaches peak speed sooner.
+Each level has a distinct named character: **Beginner**, **Easy**, **Medium**, **Hard**, **Expert**.
 
-**Speed ramp (1–60 s)** — sets the base duration for the ball speed ramp within each game. Ball speed starts at the base level and increases as play time accumulates. On each paddle hit, speed also increases by 5% (compounding), with an absolute cap to prevent the ball becoming invisible.
+### Speed model
+
+Ball speed uses an asymptotic ramp per level. There is no user-facing speed ramp slider.
+
+```javascript
+speed(t) = maxSpeed − (maxSpeed − startSpeed) × e^(−t / rampTau)
+```
+
+`t` is elapsed play time in seconds. The ball approaches `maxSpeed` smoothly and never exceeds it. Bounces do not compound speed — the ramp is the sole driver of acceleration.
+
+| Level | Name | Start speed | Max speed | Time to ~95% max |
+| --- | --- | --- | --- | --- |
+| 1 | Beginner | 5 | 9 | ~60 s |
+| 2 | Easy | 6 | 11 | ~45 s |
+| 3 | Medium | 7 | 14 | ~33 s |
+| 4 | Hard | 8 | 17 | ~24 s |
+| 5 | Expert | 9 | 21 | ~15 s |
+| — | Extreme | 10 | 26 | ~9 s |
+
+### AI prediction model
+
+Each level blends between tracking the live ball position and tracking the fully predicted contact point after wall bounces.
+
+| Level | Name | Prediction blend | Aggression | Max paddle speed |
+| --- | --- | --- | --- | --- |
+| 1 | Beginner | 0% | 0.06 | 4.5 |
+| 2 | Easy | 10% | 0.09 | 6 |
+| 3 | Medium | 32% | 0.13 | 8 |
+| 4 | Hard | 85% | 0.18 | 11 |
+| 5 | Expert | 100% | 0.26 | 15 |
+| — | Extreme | 100% + angle aim | 0.55 | 40 |
+
+### Fatigue factor
+
+From Medium difficulty upwards, the AI degrades dynamically as a rally lengthens. This rewards sustained pressure and makes longer exchanges feel like a real opponent tiring out.
+
+```javascript
+fatigue(n) = 1 − e^(−n / fatigueOnset)
+```
+
+`n` is the rally hit count (increments on every paddle contact, resets on every point). Fatigue is applied as a multiplier to prediction blend, aggression, and max paddle speed simultaneously.
+
+| Level | Onset (hits to ~63% fatigue) | Max degradation |
+| --- | --- | --- |
+| Medium | 6 hits | 55% |
+| Hard | 10 hits | 45% |
+| Expert | 16 hits | 35% |
+| Extreme | 22 hits | 25% |
+
+Beginner and Easy have no fatigue. Extreme's fatigue is barely perceptible — only marathon rallies produce a meaningful effect.
 
 ---
 
 ## Extreme mode
 
-Toggle in the right panel before starting. Locked during play.
+Toggle in the right panel before starting. Locked during play. The AI difficulty slider is disabled when Extreme is active.
 
-When enabled:
+- AI uses fully predictive targeting and aims for steep outgoing angles rather than just the contact point.
+- AI speed and aggression are far above the Expert slider maximum.
+- Ball speed ramp is exponential and reaches near-maximum within the first few exchanges.
+- All powerups are disabled.
+- The Mode panel pulses red. Theme and format buttons lock as normal.
 
-- AI speed and aggression are multiplied by 5×.
-- AI predicts the exact contact point and angles its return to maximise difficulty for the player.
-- Ball speed uses an exponential ramp instead of linear.
-- All powerups are disabled for the duration.
-- The status panel pulses red.
+---
+
+## Themes
+
+Four themes are selectable from the Theme tab strip in the footer. The selected theme persists across page reloads via `localStorage`. Theme buttons lock during an active match and re-enable on Restart.
+
+| Theme | Player colour | AI colour | Canvas style |
+| --- | --- | --- | --- |
+| **Neon** | Cyan `#00d4e0` | Orange `#ff7c2a` | Deep black, gradient paddles, sphere-shaded ball |
+| **Retro** | White | White/grey | Pure black, flat rectangles — classic 1972 Pong |
+| **Synthwave** | Magenta `#e040fb` | Electric cyan `#00e5ff` | Deep purple, perspective grid on lower half of canvas |
+| **Arctic** | Blue `#0088cc` | Burnt orange `#e05500` | White-to-pale-blue gradient — the only light theme |
+
+Each theme applies a full set of CSS custom properties to `:root`, so every UI element — scoreboard colours, panel borders, slider thumbs, toggle tracks, status pills, match track dots — updates automatically. The canvas renderer reads the active theme from `themes.js` and adjusts paddle style, ball rendering, net style, and trajectory colour accordingly.
+
+Paddle styles per theme:
+
+- Neon / Synthwave — gradient body with a thin bright edge highlight
+- Retro — flat crisp rectangle, no gradient, no glow
+- Arctic — solid fill with a subtle drop shadow
 
 ---
 
@@ -143,16 +214,30 @@ When enabled:
 
 Toggle in the right panel at any time, including during play.
 
-When on, a faint dashed orange line traces the ball's predicted path to the AI paddle, including wall bounces. A small dot marks the predicted contact point. The line updates every frame based on current ball velocity. This is useful for learning how the AI positions itself and for understanding ball angles.
+When on, a dashed line traces the ball's predicted path to the AI paddle including wall bounces, with a small contact-point dot at the end. The line colour and style follow the active theme. The prediction uses the same algorithm as the AI's targeting so the line accurately reflects where the AI expects the ball.
+
+---
+
+## Layout and scaling
+
+The UI uses a strict three-column grid (`clamp(148px, 13vw, 210px) 1fr clamp(148px, 13vw, 210px)`) applied identically to the top bar and the main area. This means every element is pixel-locked to the canvas column edges:
+
+- The brand and action buttons (Pause/Restart) sit in the left and right columns of the top bar, vertically centred relative to the scoreboard height.
+- The scoreboard, VS label, game badge, deuce pill, and match track dots all sit in the centre column, directly above the canvas.
+- The left and right side panels align exactly under the brand and action button columns respectively.
+- The footer tab strips (Format and Theme) are a simple flex row centred across the full width, independent of the grid.
+
+All panel text, pips, keys, sliders, and toggles scale with `clamp()` so the layout adapts from narrow to wide viewports without scrollbars. The canvas is letterboxed to 3:2 inside the centre column using a `ResizeObserver`, rescaling all game object positions proportionally on every resize.
 
 ---
 
 ## Physics notes
 
-- **Swept collision** — ball-paddle collision is resolved with a slab-intersection sweep rather than simple AABB overlap, so the ball cannot tunnel through paddles at high speed even at the top of the ramp.
-- **Velocity model** — `vx`/`vy` are the true velocity vector. `moveBall` applies them directly per frame without re-normalising. `handlePaddleBounce` writes a new `vx`/`vy` derived from the bounce angle and a 5% speed increase, which persists and compounds across rallies.
-- **Wall bounce** — top and bottom edges use `Math.abs(vy)` to ensure the ball always deflects correctly regardless of floating-point sign drift.
-- **Ramp** — the speed ramp scales `ball.speed` (the base reference) over time and applies it as a gentle push in the current direction each frame, so the ball accelerates smoothly without snapping.
+- **Swept collision** — ball-paddle collision uses slab-intersection sweep rather than AABB overlap, preventing tunnelling at high speed.
+- **Velocity model** — `vx`/`vy` are the true velocity. `moveBall` applies them directly per frame. `handlePaddleBounce` preserves current speed and changes only angle — no per-hit compounding.
+- **Asymptotic ramp** — `applySpeedRamp` nudges `vx`/`vy` toward the level's `maxSpeed` each frame using the exponential formula. Speed never spikes, never exceeds the cap.
+- **Wall bounce** — uses `Math.abs(vy)` to prevent floating-point sign drift.
+- **Rally hit counter** — increments on every paddle contact (both swept and AABB paths), resets on every point scored. Drives the AI fatigue system.
 
 ---
 
@@ -160,28 +245,39 @@ When on, a faint dashed orange line traces the ball's predicted path to the AI p
 
 ### Key areas in `main.js`
 
-- `init()` — canvas sizing, ResizeObserver setup, first render, overlay.
-- `startGame()` — reads settings, locks inputs, sets ramp parameters.
-- `onPointScored(side)` — handles point, game, and match resolution; resets appropriate state.
-- `update(dt, timestamp)` — per-frame physics: ramp, swept collision, AI move, score check.
-- `doResizeCanvas()` — fits a 3:2 canvas letterboxed into the center panel using `clientWidth`/`clientHeight`; rescales all game object positions proportionally.
-- `refreshUI()` — single function that syncs all DOM elements to current state; called after every state change.
+- `init()` — canvas sizing, ResizeObserver, theme restore from localStorage, first render.
+- `startGame()` — reads settings, locks inputs, creates ball with difficulty-appropriate parameters.
+- `onPointScored(side)` — handles point/game/match resolution, resets `rallyHits`, updates score state.
+- `update(dt, timestamp)` — per-frame: asymptotic ramp, swept collision, `rallyHits` increment, AI move.
+- `doResizeCanvas()` — letterboxes 3:2 canvas into centre panel; rescales positions proportionally.
+- `refreshUI()` — single function syncing all DOM to current state; called after every state change.
+- `applyTheme(themeId)` — applies CSS vars, sets renderer theme, persists to localStorage.
 
 ### Key areas in `scoring.js`
 
-- `handlePointScored(side, state)` — pure function; returns `{ state, result }`. Results: `'point'`, `'deuce'`, `'gameWon:player'`, `'gameWon:ai'`, `'matchWon:player'`, `'matchWon:ai'`.
-- `getPointStatus(state)` — returns `{ player, ai }` with `{ type, count }` or `null` for each side; drives the per-player status pills.
-- `getAdvantage(state)` — returns `'player'`, `'ai'`, or `null`; drives the `ADV` score display.
+- `handlePointScored(side, state)` — pure function; returns `{ state, result }`. Appends winner to `gameWinOrder[]` on every game won.
+- `getPointStatus(state)` — suppresses pills entirely during deuce zone (both equal and advantage states).
+- `getAdvantage(state)` — drives `ADV` score display.
+- `gameWinOrder[]` — chronological array of `'player'`/`'ai'` strings; drives match track dot colouring.
 
-### Layout
+### Key areas in `difficulty.js`
 
-The UI is a full-viewport flex column (`height: 100vh; overflow: hidden`) with a fixed header, fixed footer, and a three-column grid (`150px 1fr 150px`) for the main area. The canvas is absolutely positioned inside `.center-panel` and letterboxed to maintain 3:2 at any viewport size. No scrollbars ever appear.
+- `DIFFICULTY[1..5]` and `DIFFICULTY.extreme` — each entry is a self-contained config object with speed, AI, and fatigue parameters.
+- `getFatigue(cfg, rallyHits)` — returns fatigue value 0..1 using exponential curve.
+- `applyFatigue(base, fatigue, depth)` — scales any parameter down by `fatigue × depth`.
+
+### Key areas in `themes.js`
+
+- `THEMES` — four theme objects each containing a `css` map (CSS variable overrides) and a `canvas` config (colours, paddle style, ball style, net, trajectory, optional grid).
+- `applyThemeCSS(themeId)` — iterates the CSS map and sets properties on `:root`; also sets `document.body.dataset.theme` for per-theme CSS overrides.
+- `setRendererTheme(themeId)` in `renderer.js` — updates the module-level `TC` canvas config reference used by all draw functions.
 
 ### Browser compatibility
 
 - Requires ES module support (all modern browsers).
-- `ctx.roundRect` is used for paddle rendering with an `arcTo` fallback for Safari < 15.4.
-- `ResizeObserver` is used for canvas resizing (supported in all modern browsers).
+- `ctx.roundRect` used for paddle rendering with `arcTo` fallback for Safari < 15.4.
+- `ResizeObserver` for canvas sizing (all modern browsers).
+- `localStorage` for theme persistence (gracefully caught if unavailable).
 
 ---
 
@@ -189,7 +285,8 @@ The UI is a full-viewport flex column (`height: 100vh; overflow: hidden`) with a
 
 - Sound effects: paddle hits, wall bounces, point scored, match won.
 - Mobile/touch support: `touchmove` handler on the canvas.
-- Unit tests for `scoring.js` and `physics.js` (both export pure functions, making them straightforward to test with Vitest or Jest).
-- AI difficulty names (e.g. Beginner / Easy / Medium / Hard / Expert) alongside the numeric slider.
-- Visual feedback on powerup activation (brief flash or paddle glow).
+- Unit tests for `scoring.js`, `physics.js`, and `difficulty.js` (all export pure functions, straightforward to test with Vitest or Jest).
+- Visual feedback on powerup activation (brief flash on the paddle).
 - Persist player name to `localStorage` between sessions.
+- Additional themes (e.g. a warm amber/sepia theme, a high-contrast accessibility theme).
+  
