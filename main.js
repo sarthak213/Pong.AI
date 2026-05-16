@@ -1,10 +1,12 @@
 // main.js — game orchestrator
 
-import { createBall, clamp, sweptPaddleCollision, collidesWithPaddle, handlePaddleBounce, moveBall, bounceWalls } from './physics.js';
+import { createBall, clamp, sweptPaddleCollision, collidesWithPaddle, handlePaddleBounce, moveBall, bounceWalls, applySpeedRamp } from './physics.js';
 import { moveAI } from './ai.js';
+import { DIFFICULTY, getDifficultyLabel } from './difficulty.js';
 import { createPowerupState, tryActivatePowerup, getPowerupEffects, resetPowerupAfterPoint, resetPowerupForGame } from './powerups.js';
 import { createScoreState, resetScoreForNewGame, resetScoreForNewMatch, handlePointScored, getPointStatus, getAdvantage, isDeuce, WIN_SCORE, MATCH_FORMATS } from './scoring.js';
-import { draw } from './renderer.js';
+import { draw, setRendererTheme } from './renderer.js';
+import { THEMES, THEME_ORDER, applyThemeCSS } from './themes.js';
 
 // ─── Overlay helpers ───────────────────────────────────────────────────────────
 function showOverlay(text) {
@@ -55,26 +57,40 @@ let isPaused       = false;
 let extremeMode    = false;
 let showTrajectory = true;
 
-// FIX #2: speedMultiplier now only drives ball.speed on serve reset.
-// During play, vx/vy carry the true velocity; ramp is applied at serve time.
-let effectiveRampSeconds = 10;
-let startTimestamp       = null;
-let accumulatedPlayTime  = 0;
-let lastTime             = null;
+// Rally hit counter — increments each paddle hit, resets each point.
+// Used by the AI fatigue system.
+let rallyHits = 0;
 
-let settings = { aiDifficulty: 3, rampSeconds: 10 };
+// Elapsed active play time for speed ramp — reset each game.
+let startTimestamp      = null;
+let accumulatedPlayTime = 0;
+let lastTime            = null;
+
+let settings = { aiDifficulty: 3 };
 
 // ─── DOM refs ──────────────────────────────────────────────────────────────────
 const playerNameInput = document.getElementById('playerName');
 const pauseBtn        = document.getElementById('pauseBtn');
 const restartBtn      = document.getElementById('restartBtn');
-const rampInput       = document.getElementById('rampTime');
 const aiDiffInput     = document.getElementById('aiDifficulty');
 const aiDiffLabel     = document.getElementById('aiDiffLabel');
-const rampLabel       = document.getElementById('rampLabel');
 const extremeToggle   = document.getElementById('extremeMode');
 const trajToggle      = document.getElementById('trajToggle');
 const matchFormatBtns = document.querySelectorAll('.fmt-btn');
+const themeBtns       = document.querySelectorAll('.theme-btn');
+
+// ─── Theme state ───────────────────────────────────────────────────────────────
+let currentTheme = 'neon';
+
+function applyTheme(themeId) {
+    if (!THEMES[themeId]) return;
+    currentTheme = themeId;
+    applyThemeCSS(themeId);
+    setRendererTheme(themeId);
+    themeBtns.forEach(b => b.classList.toggle('active', b.dataset.theme === themeId));
+    // Persist to localStorage so it survives page reloads
+    try { localStorage.setItem('pongai-theme', themeId); } catch {}
+}
 
 // ─── Canvas sizing ─────────────────────────────────────────────────────────────
 function doResizeCanvas() {
@@ -144,21 +160,11 @@ function resetPositions() {
 
 function newBall(servingTo) {
     const { displayW, displayH } = getDisplaySize();
-    return createBall(displayW, displayH, gameplayScale, servingTo);
+    const diff = extremeMode ? 'extreme' : settings.aiDifficulty;
+    return createBall(displayW, displayH, gameplayScale, diff, servingTo);
 }
 
 // ─── Speed ramp ────────────────────────────────────────────────────────────────
-// Returns a multiplier applied to the ball's base speed at serve time only.
-// During a rally, vx/vy grow naturally via bounce speed-ups.
-function getRampMultiplier() {
-    if (!startTimestamp) return 1;
-    const elapsed = accumulatedPlayTime + (performance.now() - startTimestamp) / 1000;
-    if (extremeMode) {
-        return Math.min(3, 1 + (Math.exp(elapsed / Math.max(1, effectiveRampSeconds)) - 1) * 0.3);
-    }
-    return Math.max(1, 1 + elapsed / effectiveRampSeconds * 0.4);
-}
-
 // ─── Scoring / game flow ───────────────────────────────────────────────────────
 function onPointScored(side) {
     const { state: newScore, result } = handlePointScored(side, score);
@@ -168,6 +174,7 @@ function onPointScored(side) {
     playerSpeedMult = 1;
     aiSpeedMult     = 1;
     PADDLE_HEIGHT_current = PADDLE_HEIGHT;
+    rallyHits = 0; // reset fatigue counter each point
     running = false;
     refreshUI();
 
@@ -218,15 +225,11 @@ function onPointScored(side) {
 function startGame() {
     if (score.matchEnded) return;
     settings.aiDifficulty = parseInt(aiDiffInput?.value ?? '3', 10);
-    settings.rampSeconds  = parseFloat(rampInput?.value ?? '10');
     extremeMode = !!(extremeToggle?.checked);
 
     if (extremeMode) powerup = resetPowerupForGame(true);
 
-    const aiNorm = (settings.aiDifficulty - 1) / 4;
-    effectiveRampSeconds = 20 - aiNorm * 14;
-
-    // Only reset ramp if starting fresh (not resuming mid-match).
+    // Only reset elapsed time if starting fresh (not resuming mid-match between games).
     if (accumulatedPlayTime === 0) startTimestamp = null;
 
     if (!ball) ball = newBall();
@@ -241,16 +244,17 @@ function lockInputs() {
     if (playerNameInput) playerNameInput.disabled = true;
     if (aiDiffInput)     aiDiffInput.disabled     = true;
     if (extremeToggle)   extremeToggle.disabled   = true;
-    if (rampInput)       rampInput.disabled        = true;
     matchFormatBtns.forEach(b => b.disabled = true);
+    themeBtns.forEach(b => b.disabled = true);
 }
 
 function unlockInputs() {
     if (playerNameInput) playerNameInput.disabled = false;
-    if (aiDiffInput)     aiDiffInput.disabled     = false;
+    // Only re-enable difficulty slider if extreme mode isn't overriding it
+    if (aiDiffInput)     aiDiffInput.disabled     = extremeMode;
     if (extremeToggle)   extremeToggle.disabled   = false;
-    if (rampInput)       rampInput.disabled        = false;
     matchFormatBtns.forEach(b => b.disabled = false);
+    themeBtns.forEach(b => b.disabled = false);
 }
 
 function doPause() {
@@ -278,6 +282,7 @@ function doRestart() {
     powerup = resetPowerupForGame(extremeMode);
     accumulatedPlayTime = 0;
     startTimestamp      = null;
+    rallyHits           = 0;
     running  = false;
     isPaused = false;
     PADDLE_HEIGHT_current = PADDLE_HEIGHT;
@@ -325,14 +330,7 @@ function refreshUI() {
         }
     }
 
-    // Game dots
-    for (const who of ['player', 'ai']) {
-        document.querySelectorAll(`#${who}Games .game-dot`).forEach((dot, i) => {
-            dot.classList.toggle('filled', i < score.gamesWon[who]);
-        });
-    }
-
-    // Game number badge
+    // ── Game number badge ──────────────────────────────────────
     const gameNumEl = document.getElementById('gameNumber');
     if (gameNumEl) {
         const fmt = MATCH_FORMATS[score.matchFormat];
@@ -341,7 +339,38 @@ function refreshUI() {
             : '';
     }
 
-    // Powerup pips — use new .pip-on class
+    // ── Shared match track ─────────────────────────────────────
+    const trackWrap = document.getElementById('matchTrackWrap');
+    const track     = document.getElementById('matchTrack');
+    const fmt2      = MATCH_FORMATS[score.matchFormat];
+    const showTrack = fmt2 && fmt2.gamesNeeded > 1;
+    if (trackWrap) trackWrap.style.display = showTrack ? 'flex' : 'none';
+
+    if (track && showTrack) {
+        // Max games in a best-of-N series = N*2-1
+        const totalSlots = fmt2.gamesNeeded * 2 - 1;
+
+        // Rebuild dot elements only when slot count changes
+        if (track.children.length !== totalSlots) {
+            track.innerHTML = '';
+            for (let i = 0; i < totalSlots; i++) {
+                const dot = document.createElement('span');
+                dot.className = 'match-dot';
+                track.appendChild(dot);
+            }
+        }
+
+        // Colour dots in chronological order using gameWinOrder (stored on score state)
+        const dots = track.querySelectorAll('.match-dot');
+        dots.forEach((dot, i) => {
+            dot.className = 'match-dot';
+            const winner = score.gameWinOrder?.[i];
+            if (winner === 'player') dot.classList.add('won-player');
+            else if (winner === 'ai') dot.classList.add('won-ai');
+        });
+    }
+
+    // ── Powerup pips ───────────────────────────────────────────
     const puLeftEl   = document.getElementById('powerupLeft');
     const puActiveEl = document.getElementById('powerupActive');
     if (puLeftEl) {
@@ -362,18 +391,17 @@ function refreshUI() {
         }
     }
 
-    // Extreme panel
+    // ── Extreme panel ──────────────────────────────────────────
     const extremePanelEl    = document.getElementById('extremePanel');
     const extremeStatusText = document.getElementById('extremeStatusText');
     if (extremePanelEl)    extremePanelEl.classList.toggle('is-extreme', extremeMode);
     if (extremeStatusText) extremeStatusText.textContent = extremeMode ? 'EXTREME' : 'Normal';
 
-    // Pause button — update icon label and class
+    // ── Pause button ───────────────────────────────────────────
     if (pauseBtn) {
         const lbl = document.getElementById('pauseBtnLabel');
         if (lbl) lbl.textContent = isPaused ? 'Resume' : 'Pause';
         pauseBtn.classList.toggle('paused', isPaused);
-        // Update SVG icon: show play icon when paused, pause icon when playing
         const svgEl = pauseBtn.querySelector('svg');
         if (svgEl) {
             svgEl.innerHTML = isPaused
@@ -382,28 +410,19 @@ function refreshUI() {
         }
     }
 
-    // Slider labels
-    if (aiDiffLabel && aiDiffInput) aiDiffLabel.textContent = aiDiffInput.value;
-    if (rampLabel   && rampInput)   rampLabel.textContent   = rampInput.value + 's';
+    // ── Slider labels ──────────────────────────────────────────
+    if (aiDiffLabel && aiDiffInput) {
+        const level = parseInt(aiDiffInput.value);
+        const label = getDifficultyLabel(level, false);
+        aiDiffLabel.textContent = `${level} — ${label}`;
+        const sliderSection = aiDiffInput.closest('.sidebar-section');
+        if (sliderSection) sliderSection.style.opacity = extremeMode ? '0.45' : '';
+    }
 
-    // Format tabs — new class name .fmt-btn
+    // ── Format tabs ────────────────────────────────────────────
     matchFormatBtns.forEach(btn => {
         btn.classList.toggle('active', btn.dataset.format === score.matchFormat);
     });
-
-    // Match dots visibility + count
-    const playerGamesEl = document.getElementById('playerGames');
-    const aiGamesEl     = document.getElementById('aiGames');
-    const fmt        = MATCH_FORMATS[score.matchFormat];
-    const showDots   = fmt && fmt.gamesNeeded > 1;
-    const dotsNeeded = fmt ? fmt.gamesNeeded : 2;
-    for (const container of [playerGamesEl, aiGamesEl]) {
-        if (!container) continue;
-        container.style.display = showDots ? 'flex' : 'none';
-        container.querySelectorAll('.game-dot').forEach((d, i) => {
-            d.style.display = i < dotsNeeded ? '' : 'none';
-        });
-    }
 }
 
 // ─── Game loop ─────────────────────────────────────────────────────────────────
@@ -415,20 +434,11 @@ function update(dt, timestamp) {
     // vx/vy grow through bounce speed-ups; ramp only affects new serves
     // and provides a mild velocity nudge here to counteract friction.
     const elapsed = accumulatedPlayTime + (timestamp - startTimestamp) / 1000;
-    const ramp = extremeMode
-        ? Math.min(3,   1 + (Math.exp(elapsed / Math.max(1, effectiveRampSeconds)) - 1) * 0.3)
-        : Math.max(1,   1 + elapsed / effectiveRampSeconds * 0.4);
 
-    // Apply ramp as a gentle push in the current direction so speed grows over time
-    const currentSpeed = Math.hypot(ball.vx, ball.vy);
-    const targetSpeed  = ball.speed * ramp;
-    if (currentSpeed > 0 && targetSpeed > currentSpeed) {
-        const scale = targetSpeed / currentSpeed;
-        ball.vx *= scale;
-        ball.vy *= scale;
-    }
+    // Asymptotic speed ramp — approaches maxSpeed smoothly, never exceeds it.
+    applySpeedRamp(ball, elapsed);
 
-    // FIX #1: swept collision — compute the full move delta first, then test.
+    // Swept collision — compute full move delta first.
     const moveFactor = dt / (1000 / 60);
     const dx = ball.vx * moveFactor;
     const dy = ball.vy * moveFactor;
@@ -436,36 +446,33 @@ function update(dt, timestamp) {
     const AI_X = getAI_X();
     const { displayW, displayH } = getDisplaySize();
 
-    // Attach radius to ball object temporarily for swept test
-    ball.r = BALL_RADIUS;
+    ball.r = BALL_RADIUS; // needed by sweptPaddleCollision
 
-    // Player paddle sweep (only when ball moving left)
     if (ball.vx < 0) {
         const t = sweptPaddleCollision(ball, dx, dy, PLAYER_X, playerY, PADDLE_WIDTH, PADDLE_HEIGHT_current);
         if (t !== null) {
-            // Move to contact point
             ball.x += dx * t;
             ball.y += dy * t;
-            ball.x  = PLAYER_X + PADDLE_WIDTH + BALL_RADIUS; // push out of paddle
+            ball.x  = PLAYER_X + PADDLE_WIDTH + BALL_RADIUS;
             handlePaddleBounce(ball, playerY, PADDLE_HEIGHT_current, true);
-            // Move remaining fraction after bounce
-            const remaining = 1 - t;
-            ball.x += (ball.vx / Math.hypot(ball.vx, ball.vy)) * Math.hypot(dx, dy) * remaining;
-            ball.y += (ball.vy / Math.hypot(ball.vx, ball.vy)) * Math.hypot(dx, dy) * remaining;
+            rallyHits++;
+            const rem = 1 - t, spd = Math.hypot(dx, dy), len = Math.hypot(ball.vx, ball.vy);
+            ball.x += (ball.vx / len) * spd * rem;
+            ball.y += (ball.vy / len) * spd * rem;
         } else {
             moveBall(ball, dt);
         }
     } else if (ball.vx > 0) {
-        // AI paddle sweep
         const t = sweptPaddleCollision(ball, dx, dy, AI_X, aiY, PADDLE_WIDTH, PADDLE_HEIGHT);
         if (t !== null) {
             ball.x += dx * t;
             ball.y += dy * t;
             ball.x  = AI_X - BALL_RADIUS;
             handlePaddleBounce(ball, aiY, PADDLE_HEIGHT, false);
-            const remaining = 1 - t;
-            ball.x += (ball.vx / Math.hypot(ball.vx, ball.vy)) * Math.hypot(dx, dy) * remaining;
-            ball.y += (ball.vy / Math.hypot(ball.vx, ball.vy)) * Math.hypot(dx, dy) * remaining;
+            rallyHits++;
+            const rem = 1 - t, spd = Math.hypot(dx, dy), len = Math.hypot(ball.vx, ball.vy);
+            ball.x += (ball.vx / len) * spd * rem;
+            ball.y += (ball.vy / len) * spd * rem;
         } else {
             moveBall(ball, dt);
         }
@@ -475,27 +482,29 @@ function update(dt, timestamp) {
 
     bounceWalls(ball, BALL_RADIUS, displayH);
 
-    // AABB guard — catches edge cases the sweep might miss at very low dt
+    // AABB guard for edge cases
     if (collidesWithPaddle(ball, BALL_RADIUS, PLAYER_X, playerY, PADDLE_WIDTH, PADDLE_HEIGHT_current) && ball.vx < 0) {
         ball.x = PLAYER_X + PADDLE_WIDTH + BALL_RADIUS;
         handlePaddleBounce(ball, playerY, PADDLE_HEIGHT_current, true);
+        rallyHits++;
     }
     if (collidesWithPaddle(ball, BALL_RADIUS, AI_X, aiY, PADDLE_WIDTH, PADDLE_HEIGHT) && ball.vx > 0) {
         ball.x = AI_X - BALL_RADIUS;
         handlePaddleBounce(ball, aiY, PADDLE_HEIGHT, false);
+        rallyHits++;
     }
 
-    // Score
     if (ball.x - BALL_RADIUS < 0)       { onPointScored('ai');     return; }
     if (ball.x + BALL_RADIUS > displayW) { onPointScored('player'); return; }
 
     aiY = moveAI({
-        aiY, ball, ballRadius: BALL_RADIUS, paddleH: PADDLE_HEIGHT, paddleW: PADDLE_WIDTH,
-        aiX: AI_X, displayH, displayW,
-        aiDifficulty: settings.aiDifficulty,
+        aiY, ball, ballRadius: BALL_RADIUS, paddleH: PADDLE_HEIGHT,
+        aiX: AI_X, displayH,
+        difficulty: settings.aiDifficulty,
         aiSpeedMultiplier: aiSpeedMult,
         extremeMode, playerY, playerPaddleH: PADDLE_HEIGHT_current,
-        gameplayScale, dt
+        gameplayScale, dt,
+        rallyHits,
     });
 }
 
@@ -553,18 +562,26 @@ restartBtn?.addEventListener('click', () => doRestart());
 
 aiDiffInput?.addEventListener('input', () => {
     settings.aiDifficulty = parseInt(aiDiffInput.value, 10);
-    if (aiDiffLabel) aiDiffLabel.textContent = aiDiffInput.value;
-});
-
-rampInput?.addEventListener('input', () => {
-    settings.rampSeconds = parseFloat(rampInput.value);
-    if (rampLabel) rampLabel.textContent = rampInput.value + 's';
+    if (aiDiffLabel) {
+        const label = getDifficultyLabel(settings.aiDifficulty, false); // never Extreme
+        aiDiffLabel.textContent = `${aiDiffInput.value} — ${label}`;
+    }
 });
 
 extremeToggle?.addEventListener('change', () => {
     extremeMode = !!extremeToggle.checked;
-    if (extremeMode) powerup = resetPowerupForGame(true);
-    else if (!running && powerup.left === 0) powerup = resetPowerupForGame(false);
+    if (extremeMode) {
+        powerup = resetPowerupForGame(true);
+        // Disable difficulty slider visually when extreme is on —
+        // the slider value is irrelevant in extreme mode.
+        if (aiDiffInput) aiDiffInput.disabled = true;
+    } else {
+        if (!running) {
+            // Re-enable slider only if not in an active game
+            if (aiDiffInput) aiDiffInput.disabled = false;
+        }
+        powerup = resetPowerupForGame(false);
+    }
     refreshUI();
 });
 
@@ -576,6 +593,10 @@ matchFormatBtns.forEach(btn => {
         score.matchFormat = btn.dataset.format;
         refreshUI();
     });
+});
+
+themeBtns.forEach(btn => {
+    btn.addEventListener('click', () => applyTheme(btn.dataset.theme));
 });
 
 // ─── Powerup activation ────────────────────────────────────────────────────────
@@ -592,6 +613,11 @@ function activatePowerup(type) {
 
 // ─── Init ──────────────────────────────────────────────────────────────────────
 (function init() {
+    // Restore saved theme (fallback to 'neon')
+    let savedTheme = 'neon';
+    try { savedTheme = localStorage.getItem('pongai-theme') || 'neon'; } catch {}
+    applyTheme(savedTheme);
+
     doResizeCanvas();
     ball = newBall();
     resetPositions();

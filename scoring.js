@@ -20,6 +20,7 @@ export function createScoreState() {
         lastPointState: null,
         matchFormat: 'best3',
         matchEnded: false,
+        gameWinOrder: [],  // chronological list of 'player'|'ai' per game won
     };
 }
 
@@ -32,6 +33,7 @@ export function resetScoreForNewGame(state) {
         gamePointCount: { player: 0, ai: 0 },
         matchPointCount: { player: 0, ai: 0 },
         lastPointState: null,
+        // Keep gameWinOrder and gamesWon intact — they span the whole match
     };
 }
 
@@ -39,6 +41,7 @@ export function resetScoreForNewMatch(matchFormat) {
     return {
         ...createScoreState(),
         matchFormat: matchFormat ?? 'best3',
+        gameWinOrder: [],
     };
 }
 
@@ -84,6 +87,7 @@ export function handlePointScored(side, state) {
     const won = checkGameWin(s.points, target);
     if (won) {
         s.gamesWon[won] += 1;
+        s.gameWinOrder = [...(s.gameWinOrder ?? []), won]; // record in order
         const gamesNeeded = MATCH_FORMATS[s.matchFormat]?.gamesNeeded ?? 2;
         if (s.gamesWon[won] >= gamesNeeded) {
             s.matchEnded = true;

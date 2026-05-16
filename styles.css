@@ -65,6 +65,18 @@ body {
 }
 
 /* ── App wrapper ────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════
+   LAYOUT SYSTEM
+   Every row uses the same 3-column grid so all elements are
+   pixel-perfectly aligned to the canvas column edges.
+   ═══════════════════════════════════════════════════════════ */
+
+/* Shared column template — must match .main */
+:root {
+    --col-side: clamp(148px, 13vw, 210px);
+    --col-gap:  clamp(6px, 0.8vw, 12px);
+}
+
 .app {
     width: 100%;
     max-width: 1440px;
@@ -72,44 +84,70 @@ body {
     display: flex;
     flex-direction: column;
     padding: 10px 16px 8px;
-    gap: 8px;
+    gap: 6px;
     overflow: hidden;
+    margin: 0 auto;
 }
 
-/* ═══════════════════════════════════════════════════════════
-   HEADER
-   ═══════════════════════════════════════════════════════════ */
-.header {
+/* Every row that must align to the canvas column */
+.layout-row {
+    display: grid;
+    grid-template-columns: var(--col-side) 1fr var(--col-side);
+    gap: var(--col-gap);
+    align-items: center;
+    width: 100%;
+    flex-shrink: 0;
+}
+
+/* ── Top bar ─────────────────────────────────────────────────── */
+.top-bar {
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    align-items: center;  /* vertically centre brand, scores, and buttons */
+}
+
+/* Col 1: brand — left-aligned in its column */
+.col-brand {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 20px;
-    padding-bottom: 10px;
-    border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
-    position: relative;
+    gap: 8px;
+    align-self: center;
+}
+
+/* Col 2: centre column — scoreboard + match dots */
+.col-centre {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+/* Col 3: actions — right-aligned, vertically centred */
+.col-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    align-self: center;
 }
 
 /* Brand */
-.header-brand {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 110px;
-    flex-shrink: 0;
-}
 .brand-dot {
-    width: 8px; height: 8px; border-radius: 50%;
+    width: clamp(7px, 0.55vw, 10px);
+    height: clamp(7px, 0.55vw, 10px);
+    border-radius: 50%;
     background: var(--cyan);
     box-shadow: 0 0 8px var(--cyan), 0 0 16px rgba(0,212,224,0.3);
     animation: pulse-dot 3s ease-in-out infinite;
+    flex-shrink: 0;
 }
 @keyframes pulse-dot {
     0%, 100% { box-shadow: 0 0 8px var(--cyan), 0 0 16px rgba(0,212,224,0.3); }
     50%       { box-shadow: 0 0 12px var(--cyan), 0 0 28px rgba(0,212,224,0.5); }
 }
 .brand-text {
-    font-size: 17px;
+    font-size: clamp(15px, 1.3vw, 22px);
     font-weight: 700;
     letter-spacing: -0.4px;
     color: var(--text);
@@ -118,10 +156,9 @@ body {
 /* ── Scoreboard ─────────────────────────────────────────────── */
 .scoreboard {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
-    gap: 0;
-    flex: 1;
+    width: 100%;
 }
 
 .player-col {
@@ -129,9 +166,10 @@ body {
     flex-direction: column;
     align-items: center;
     gap: 4px;
-    padding: 0 36px;
-    min-width: 140px;
+    padding: 0 clamp(20px, 2.5vw, 40px);
+    flex: 1;
 }
+
 
 .ai-col { align-items: center; }
 
@@ -196,24 +234,6 @@ body {
     min-height: 28px;
 }
 
-.game-dots { display: flex; gap: 5px; align-items: center; }
-.game-dot {
-    width: 6px; height: 6px; border-radius: 50%;
-    background: var(--border-mid);
-    border: 1px solid rgba(255,255,255,0.08);
-    transition: background 0.25s, box-shadow 0.25s;
-}
-#playerGames .game-dot.filled {
-    background: var(--cyan);
-    border-color: var(--cyan);
-    box-shadow: 0 0 6px rgba(0,212,224,0.6);
-}
-#aiGames .game-dot.filled {
-    background: var(--orange);
-    border-color: var(--orange);
-    box-shadow: 0 0 6px rgba(255,124,42,0.6);
-}
-
 /* Status pills under individual scores */
 .status-pill {
     display: inline-flex;
@@ -245,9 +265,12 @@ body {
     display: flex;
     flex-direction: column;
     align-items: center;
+    justify-content: center;  /* vertically centre vs/game badge */
     gap: 4px;
     flex-shrink: 0;
     padding: 0 16px;
+    /* Align to the score digit area by matching the score line-height */
+    align-self: center;
 }
 .vs-label {
     font-size: 9px;
@@ -282,13 +305,46 @@ body {
     to   { opacity: 1; transform: scale(1); }
 }
 
-/* Header action buttons */
-.header-actions {
+/* ── Shared match track ─────────────────────────────────────── */
+.match-track-wrap {
     display: flex;
-    gap: 8px;
-    min-width: 110px;
-    justify-content: flex-end;
+    justify-content: center;
+    width: 100%;
+}
+.match-track {
+    display: flex;
+    align-items: center;
+    gap: clamp(8px, 0.9vw, 14px);
+}
+.match-dot {
+    width: clamp(10px, 1vw, 16px);
+    height: clamp(10px, 1vw, 16px);
+    border-radius: 50%;
+    background: var(--border-mid);
+    border: 1.5px solid rgba(255,255,255,0.1);
+    transition: background 0.3s, border-color 0.3s, box-shadow 0.3s, transform 0.2s;
     flex-shrink: 0;
+}
+.match-dot.won-player {
+    background: var(--cyan);
+    border-color: var(--cyan);
+    box-shadow: 0 0 8px var(--cyan-glow);
+    transform: scale(1.15);
+}
+.match-dot.won-ai {
+    background: var(--orange);
+    border-color: var(--orange);
+    box-shadow: 0 0 8px var(--orange-glow);
+    transform: scale(1.15);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MAIN — inherits the same grid via .layout-row
+   ═══════════════════════════════════════════════════════════ */
+.main {
+    flex: 1;
+    min-height: 0;
+    align-items: stretch;
 }
 
 /* ── Buttons ────────────────────────────────────────────────── */
@@ -340,8 +396,9 @@ body {
    ═══════════════════════════════════════════════════════════ */
 .main {
     display: grid;
-    grid-template-columns: 148px 1fr 148px;
-    gap: 8px;
+    /* Sidebars grow with the viewport: min 148px, preferred 13vw, max 210px */
+    grid-template-columns: clamp(148px, 13vw, 210px) 1fr clamp(148px, 13vw, 210px);
+    gap: clamp(6px, 0.8vw, 12px);
     flex: 1;
     min-height: 0;
     align-items: stretch;
@@ -351,7 +408,7 @@ body {
 .sidebar {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: clamp(5px, 0.5vw, 8px);
     overflow: hidden;
 }
 
@@ -359,17 +416,17 @@ body {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--r-md);
-    padding: 10px 12px;
+    padding: clamp(8px, 0.8vw, 14px) clamp(10px, 1vw, 16px);
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: clamp(6px, 0.6vw, 10px);
     flex-shrink: 0;
     transition: border-color 0.2s;
 }
 .sidebar-section:hover { border-color: var(--border-mid); }
 
 .section-label {
-    font-size: 9px;
+    font-size: clamp(9px, 0.7vw, 11px);
     font-weight: 700;
     letter-spacing: 0.1em;
     text-transform: uppercase;
@@ -378,7 +435,7 @@ body {
 
 /* Mode indicator */
 .mode-indicator {
-    font-size: 12px;
+    font-size: clamp(12px, 1vw, 15px);
     font-weight: 600;
     color: var(--text-2);
     transition: color 0.2s;
@@ -397,9 +454,11 @@ body {
 }
 
 /* Powerup pips */
-.pip-track { display: flex; gap: 6px; align-items: center; }
+.pip-track { display: flex; gap: clamp(5px, 0.5vw, 8px); align-items: center; }
 .pip {
-    width: 8px; height: 8px; border-radius: 50%;
+    width: clamp(8px, 0.7vw, 12px);
+    height: clamp(8px, 0.7vw, 12px);
+    border-radius: 50%;
     background: var(--border-mid);
     border: 1px solid transparent;
     transition: all 0.2s;
@@ -411,7 +470,7 @@ body {
 }
 
 .active-powerup {
-    font-size: 11px;
+    font-size: clamp(10px, 0.85vw, 13px);
     font-weight: 500;
     color: var(--text-3);
     font-family: var(--mono);
@@ -422,27 +481,27 @@ body {
 .key-row {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: clamp(3px, 0.3vw, 5px);
 }
 .key-item {
     display: flex;
     align-items: center;
-    gap: 7px;
-    font-size: 10px;
+    gap: clamp(5px, 0.5vw, 8px);
+    font-size: clamp(10px, 0.8vw, 12px);
     color: var(--text-3);
 }
 kbd {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 20px;
-    height: 18px;
-    padding: 0 5px;
+    min-width: clamp(18px, 1.4vw, 24px);
+    height: clamp(16px, 1.3vw, 22px);
+    padding: 0 clamp(3px, 0.3vw, 6px);
     border-radius: 4px;
     background: rgba(255,255,255,0.05);
     border: 1px solid var(--border-mid);
     font-family: var(--mono);
-    font-size: 10px;
+    font-size: clamp(9px, 0.75vw, 12px);
     font-weight: 600;
     color: var(--text);
     letter-spacing: 0;
@@ -477,18 +536,18 @@ kbd {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 9px;
+    font-size: clamp(9px, 0.7vw, 11px);
     color: var(--text-3);
 }
 .slider-val {
     font-family: var(--mono);
-    font-size: 10px;
+    font-size: clamp(10px, 0.8vw, 12px);
     font-weight: 600;
     color: var(--text-2);
 }
 
 /* Toggles */
-.toggles-section { gap: 10px; }
+.toggles-section { gap: clamp(8px, 0.8vw, 12px); }
 .toggle-row {
     display: flex;
     align-items: center;
@@ -498,7 +557,9 @@ kbd {
 .toggle { display: flex; align-items: center; cursor: pointer; }
 .toggle input { display: none; }
 .toggle-track {
-    width: 32px; height: 17px; border-radius: 9px;
+    width: clamp(30px, 2.2vw, 38px);
+    height: clamp(16px, 1.2vw, 20px);
+    border-radius: 10px;
     background: rgba(255,255,255,0.08);
     border: 1px solid var(--border);
     position: relative;
@@ -508,7 +569,8 @@ kbd {
 .toggle-thumb {
     position: absolute;
     top: 2px; left: 2px;
-    width: 13px; height: 13px;
+    width: clamp(12px, 0.9vw, 16px);
+    height: clamp(12px, 0.9vw, 16px);
     border-radius: 50%;
     background: var(--text-3);
     transition: transform 0.2s, background 0.2s;
@@ -518,7 +580,7 @@ kbd {
     border-color: rgba(0,212,224,0.35);
 }
 .toggle input:checked + .toggle-track .toggle-thumb {
-    transform: translateX(15px);
+    transform: translateX(clamp(14px, 1vw, 18px));
     background: var(--cyan);
 }
 /* Extreme toggle — red when on */
@@ -578,17 +640,29 @@ kbd {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   FOOTER
+   FOOTER — full-width flex, tabs centred
    ═══════════════════════════════════════════════════════════ */
 .footer {
-    display: flex;
+    display: flex !important;   /* override .layout-row grid */
     align-items: center;
     justify-content: center;
-    gap: 10px;
-    padding-top: 8px;
+    gap: 12px;
+    padding-top: 6px;
     border-top: 1px solid var(--border);
     flex-shrink: 0;
 }
+
+/* Both clusters sit as direct children of .footer, side by side */
+.tab-cluster {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+/* Hide the empty col-brand/col-actions spacers in the footer */
+.footer .col-brand,
+.footer .col-actions { display: none; }
 
 .footer-label {
     font-size: 9px;
@@ -596,6 +670,7 @@ kbd {
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--text-3);
+    white-space: nowrap;
 }
 
 .format-group {
@@ -631,3 +706,102 @@ kbd {
    CANVAS BACKGROUND (drawn by renderer, but set page bg)
    ═══════════════════════════════════════════════════════════ */
 /* Renderer draws onto a dark surface — handled in renderer.js */
+
+/* ═══════════════════════════════════════════════════════════
+   THEME PICKER
+   ═══════════════════════════════════════════════════════════ */
+.footer-sep {
+    width: 1px;
+    height: 18px;
+    background: var(--border-mid);
+    margin: 0 2px;
+    flex-shrink: 0;
+}
+
+.theme-group {
+    display: flex;
+    gap: 5px;
+}
+
+.theme-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: var(--r-sm);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-2);
+    font-family: var(--font);
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    white-space: nowrap;
+}
+.theme-btn:hover:not(:disabled) {
+    background: var(--surface-hover);
+    color: var(--text);
+    border-color: var(--border-mid);
+}
+.theme-btn.active {
+    background: var(--cyan-dim);
+    color: var(--cyan);
+    border-color: var(--cyan-glow);
+    font-weight: 600;
+}
+.theme-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
+    pointer-events: none;
+}
+
+.theme-swatch {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    /* Split circle: left half = player colour, right half = AI colour */
+    background: linear-gradient(to right, var(--a) 50%, var(--b) 50%);
+    border: 1px solid rgba(255,255,255,0.12);
+    flex-shrink: 0;
+}
+
+/* ── Arctic theme light-mode overrides ─────────────────────── */
+[data-theme="arctic"] body,
+[data-theme="arctic"] .app { background: var(--bg); }
+[data-theme="arctic"] .sidebar-section { background: rgba(0,0,0,0.04); }
+[data-theme="arctic"] kbd { background: rgba(0,0,0,0.06); border-color: rgba(0,0,0,0.14); color: var(--text); }
+[data-theme="arctic"] .overlay-msg { background: rgba(240,248,255,0.88); color: var(--text); border-color: rgba(0,100,200,0.15); }
+[data-theme="arctic"] #pong { border-color: rgba(0,100,200,0.15); box-shadow: 0 4px 24px rgba(0,80,160,0.1); }
+[data-theme="arctic"] .format-group,
+[data-theme="arctic"] .theme-group { background: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.1); }
+[data-theme="arctic"] .fmt-btn,
+[data-theme="arctic"] .theme-btn { color: var(--text-2); }
+[data-theme="arctic"] .btn-ghost { color: var(--text-2); background: rgba(0,0,0,0.05); }
+[data-theme="arctic"] .brand-text { color: var(--text); }
+[data-theme="arctic"] .top-bar { border-bottom-color: rgba(0,0,0,0.1); }
+[data-theme="arctic"] .footer  { border-top-color:    rgba(0,0,0,0.1); }
+[data-theme="arctic"] .slider { background: rgba(0,0,0,0.12); }
+[data-theme="arctic"] .toggle-track { background: rgba(0,0,0,0.1); border-color: rgba(0,0,0,0.12); }
+[data-theme="arctic"] .brand-dot { background: var(--cyan); box-shadow: 0 0 8px var(--cyan); animation: none; }
+
+/* ── Synthwave extra glow on canvas ────────────────────────── */
+[data-theme="synthwave"] #pong {
+    box-shadow:
+        0 0 0 1px rgba(224,64,251,0.08),
+        0 8px 40px rgba(0,0,0,0.6),
+        0 0 60px rgba(100,0,150,0.15);
+}
+[data-theme="synthwave"] .brand-dot {
+    background: #e040fb;
+    box-shadow: 0 0 10px #e040fb, 0 0 22px rgba(224,64,251,0.4);
+}
+
+/* ── Retro: monochrome UI hints ────────────────────────────── */
+[data-theme="retro"] .brand-dot { background: #fff; box-shadow: none; animation: none; }
+[data-theme="retro"] .player-score { color: #fff; text-shadow: none; }
+[data-theme="retro"] .ai-score { color: #aaa; text-shadow: none; }
+[data-theme="retro"] #pong { box-shadow: none; border-color: rgba(255,255,255,0.1); }
+[data-theme="retro"] .fmt-btn.active { background: rgba(255,255,255,0.08); color: #fff; border-color: rgba(255,255,255,0.2); }
+[data-theme="retro"] .theme-btn.active { background: rgba(255,255,255,0.08); color: #fff; border-color: rgba(255,255,255,0.2); }

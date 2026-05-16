@@ -10,34 +10,33 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <div class="app">
+<div class="app">
 
-        <!-- ── Header ─────────────────────────────────────────── -->
-        <header class="header">
-            <div class="header-brand">
-                <span class="brand-dot"></span>
-                <span class="brand-text">Pong.AI</span>
-            </div>
+    <!--
+        Layout strategy: every row is a 3-column grid with the same
+        column template as .main. This hard-locks the brand, scoreboard,
+        actions, footer, and sidebar panels to the canvas column edges.
+        Nothing floats free.
+    -->
 
+    <!-- ── Row 1: top bar ──────────────────────────────────────── -->
+    <div class="layout-row top-bar">
+        <!-- Col 1: brand -->
+        <div class="col-brand">
+            <span class="brand-dot"></span>
+            <span class="brand-text">Pong.AI</span>
+        </div>
+
+        <!-- Col 2: scoreboard + match dots (centred over canvas) -->
+        <div class="col-centre">
             <div class="scoreboard">
-                <!-- Player -->
                 <div class="player-col" id="playerCol">
-                    <input id="playerName" class="name-input" value="Player" maxlength="14" autocomplete="off" spellcheck="false">
-                    <div class="score-wrap">
-                        <div id="playerScore" class="score player-score">0</div>
-                    </div>
-                    <div class="col-meta">
-                        <div class="game-dots" id="playerGames">
-                            <span class="game-dot"></span>
-                            <span class="game-dot"></span>
-                            <span class="game-dot"></span>
-                            <span class="game-dot"></span>
-                        </div>
-                        <div id="playerStatus" class="status-pill"></div>
-                    </div>
+                    <input id="playerName" class="name-input" value="Player"
+                           maxlength="14" autocomplete="off" spellcheck="false">
+                    <div id="playerScore" class="score player-score">0</div>
+                    <div id="playerStatus" class="status-pill"></div>
                 </div>
 
-                <!-- Centre divider -->
                 <div class="score-divider">
                     <span class="vs-label">VS</span>
                     <span class="game-badge" id="gameNumber"></span>
@@ -46,126 +45,96 @@
                     </div>
                 </div>
 
-                <!-- AI -->
                 <div class="player-col ai-col" id="aiCol">
-                    <span class="name-label ai-name">AI</span>
-                    <div class="score-wrap">
-                        <div id="aiScore" class="score ai-score">0</div>
-                    </div>
-                    <div class="col-meta">
-                        <div class="game-dots" id="aiGames">
-                            <span class="game-dot"></span>
-                            <span class="game-dot"></span>
-                            <span class="game-dot"></span>
-                            <span class="game-dot"></span>
-                        </div>
-                        <div id="aiStatus" class="status-pill"></div>
-                    </div>
+                    <span class="name-label">AI</span>
+                    <div id="aiScore" class="score ai-score">0</div>
+                    <div id="aiStatus" class="status-pill"></div>
                 </div>
             </div>
 
-            <div class="header-actions">
-                <button id="pauseBtn" class="btn btn-ghost">
-                    <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                        <rect x="2" y="1.5" width="3.5" height="10" rx="1" fill="currentColor"/>
-                        <rect x="7.5" y="1.5" width="3.5" height="10" rx="1" fill="currentColor"/>
-                    </svg>
-                    <span id="pauseBtnLabel">Pause</span>
-                </button>
-                <button id="restartBtn" class="btn btn-primary">Restart</button>
+            <!-- Match track sits directly below scores, centred over canvas -->
+            <div class="match-track-wrap" id="matchTrackWrap" style="display:none;">
+                <div class="match-track" id="matchTrack"></div>
             </div>
-        </header>
+        </div>
 
-        <!-- ── Main area ───────────────────────────────────────── -->
-        <main class="main">
+        <!-- Col 3: action buttons -->
+        <div class="col-actions">
+            <button id="pauseBtn" class="btn btn-ghost">
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                    <rect x="2" y="1.5" width="3.5" height="10" rx="1" fill="currentColor"/>
+                    <rect x="7.5" y="1.5" width="3.5" height="10" rx="1" fill="currentColor"/>
+                </svg>
+                <span id="pauseBtnLabel">Pause</span>
+            </button>
+            <button id="restartBtn" class="btn btn-primary">Restart</button>
+        </div>
+    </div>
 
-            <!-- Left sidebar -->
-            <aside class="sidebar sidebar-left">
-                <div class="sidebar-section" id="extremePanel">
-                    <div class="section-label">Mode</div>
-                    <div class="mode-indicator" id="extremeStatusText">Normal</div>
+    <!-- ── Row 2: main (sidebars + canvas) ─────────────────────── -->
+    <main class="layout-row main">
+
+        <aside class="sidebar sidebar-left">
+            <div class="sidebar-section" id="extremePanel">
+                <div class="section-label">Mode</div>
+                <div class="mode-indicator" id="extremeStatusText">Normal</div>
+            </div>
+            <div class="sidebar-section">
+                <div class="section-label">Powerups</div>
+                <div class="pip-track" id="powerupLeft">
+                    <span class="pip pip-on"></span>
+                    <span class="pip pip-on"></span>
                 </div>
-
-                <div class="sidebar-section">
-                    <div class="section-label">Powerups</div>
-                    <div class="pip-track" id="powerupLeft">
-                        <span class="pip pip-on"></span>
-                        <span class="pip pip-on"></span>
-                    </div>
-                    <div class="active-powerup" id="powerupActive">None active</div>
-                    <div class="key-row">
-                        <div class="key-item">
-                            <kbd>W</kbd>
-                            <span>Speed</span>
-                        </div>
-                        <div class="key-item">
-                            <kbd>D</kbd>
-                            <span>Size</span>
-                        </div>
-                    </div>
+                <div class="active-powerup" id="powerupActive">None active</div>
+                <div class="key-row">
+                    <div class="key-item"><kbd>W</kbd><span>Speed</span></div>
+                    <div class="key-item"><kbd>D</kbd><span>Size</span></div>
                 </div>
-            </aside>
+            </div>
+        </aside>
 
-            <!-- Canvas -->
-            <section class="arena">
-                <canvas id="pong" width="900" height="600"></canvas>
-                <div class="overlay" id="overlay">
-                    <p id="message" class="overlay-msg">Click or press Space to start</p>
-                </div>
-            </section>
+        <section class="arena">
+            <canvas id="pong" width="900" height="600"></canvas>
+            <div class="overlay" id="overlay">
+                <p id="message" class="overlay-msg">Click or press Space to start</p>
+            </div>
+        </section>
 
-            <!-- Right sidebar -->
-            <aside class="sidebar sidebar-right">
-                <div class="sidebar-section">
-                    <div class="section-label">AI Difficulty</div>
-                    <div class="slider-group">
-                        <input id="aiDifficulty" type="range" min="1" max="5" value="3" class="slider">
-                        <div class="slider-markers">
-                            <span>Easy</span>
-                            <span id="aiDiffLabel" class="slider-val">3</span>
-                            <span>Hard</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="sidebar-section">
-                    <div class="section-label">Speed Ramp</div>
-                    <div class="slider-group">
-                        <input id="rampTime" type="range" min="1" max="60" value="10" class="slider">
-                        <div class="slider-markers">
-                            <span>Fast</span>
-                            <span id="rampLabel" class="slider-val">10s</span>
-                            <span>Slow</span>
-                        </div>
+        <aside class="sidebar sidebar-right">
+            <div class="sidebar-section">
+                <div class="section-label">AI Difficulty</div>
+                <div class="slider-group">
+                    <input id="aiDifficulty" type="range" min="1" max="5" value="3" class="slider">
+                    <div class="slider-markers">
+                        <span>Beginner</span>
+                        <span id="aiDiffLabel" class="slider-val">3 — Medium</span>
+                        <span>Expert</span>
                     </div>
                 </div>
-
-                <div class="sidebar-section toggles-section">
-                    <div class="toggle-row">
-                        <div>
-                            <div class="section-label">Trajectory</div>
-                        </div>
-                        <label class="toggle">
-                            <input id="trajToggle" type="checkbox" checked>
-                            <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                        </label>
-                    </div>
-                    <div class="toggle-row">
-                        <div>
-                            <div class="section-label">Extreme</div>
-                        </div>
-                        <label class="toggle">
-                            <input id="extremeMode" type="checkbox">
-                            <span class="toggle-track extreme-track"><span class="toggle-thumb"></span></span>
-                        </label>
-                    </div>
+            </div>
+            <div class="sidebar-section toggles-section">
+                <div class="toggle-row">
+                    <div class="section-label">Trajectory</div>
+                    <label class="toggle">
+                        <input id="trajToggle" type="checkbox" checked>
+                        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                    </label>
                 </div>
-            </aside>
+                <div class="toggle-row">
+                    <div class="section-label">Extreme</div>
+                    <label class="toggle">
+                        <input id="extremeMode" type="checkbox">
+                        <span class="toggle-track extreme-track"><span class="toggle-thumb"></span></span>
+                    </label>
+                </div>
+            </div>
+        </aside>
 
-        </main>
+    </main>
 
-        <!-- ── Footer ─────────────────────────────────────────── -->
-        <footer class="footer">
+    <!-- ── Row 3: footer ───────────────────────────────────────── -->
+    <footer class="layout-row footer">
+        <div class="tab-cluster">
             <span class="footer-label">Format</span>
             <div class="format-group">
                 <button class="fmt-btn" data-format="one">One-shot</button>
@@ -173,9 +142,30 @@
                 <button class="fmt-btn" data-format="best5">Best of 5</button>
                 <button class="fmt-btn" data-format="best7">Best of 7</button>
             </div>
-        </footer>
+        </div>
 
-    </div>
-    <script type="module" src="main.js"></script>
+        <div class="footer-sep"></div>
+
+        <div class="tab-cluster">
+            <span class="footer-label">Theme</span>
+            <div class="theme-group" id="themeGroup">
+                <button class="theme-btn active" data-theme="neon">
+                    <span class="theme-swatch" style="--a:#00d4e0;--b:#ff7c2a"></span>Neon
+                </button>
+                <button class="theme-btn" data-theme="retro">
+                    <span class="theme-swatch" style="--a:#ffffff;--b:#aaaaaa"></span>Retro
+                </button>
+                <button class="theme-btn" data-theme="synthwave">
+                    <span class="theme-swatch" style="--a:#e040fb;--b:#00e5ff"></span>Synthwave
+                </button>
+                <button class="theme-btn" data-theme="arctic">
+                    <span class="theme-swatch" style="--a:#0088cc;--b:#e05500"></span>Arctic
+                </button>
+            </div>
+        </div>
+    </footer>
+
+</div>
+<script type="module" src="main.js"></script>
 </body>
-</html> 
+</html>
