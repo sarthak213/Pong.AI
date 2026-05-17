@@ -234,30 +234,69 @@ body {
     min-height: 28px;
 }
 
-/* Status pills under individual scores */
-.status-pill {
+/* Status banner wrap — shared space for deuce pill and point status */
+.status-banner-wrap {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 22px;
+    width: 100%;
+}
+
+/* Deuce — boxy, theme-coloured (uses --cyan as neutral accent) */
+.deuce-pill {
     display: inline-flex;
     align-items: center;
-    height: 18px;
-    padding: 0 8px;
-    border-radius: 20px;
-    font-size: 9px;
+    padding: 3px 12px 3px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    background: rgba(255,255,255,0.05);
+    color: var(--text-2);
+    border-left: 3px solid var(--text-3);
+    animation: popIn 0.18s cubic-bezier(0.34,1.56,0.64,1);
+}
+@keyframes popIn {
+    from { opacity: 0; transform: scale(0.8); }
+    to   { opacity: 1; transform: scale(1); }
+}
+
+/* Point status banner — boxy, theme-coloured, shared between GP and MP */
+.point-status-banner {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 12px 3px 8px;
+    border-radius: 4px;   /* boxy, not pill */
+    font-size: 10px;
     font-weight: 700;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    white-space: nowrap;
-    transition: opacity 0.2s;
+    animation: popIn 0.18s cubic-bezier(0.34,1.56,0.64,1);
+    border-left: 3px solid currentColor;
 }
-.status-pill:empty { display: none; }
-.status-gp {
-    background: rgba(0,140,255,0.12);
-    color: #60aaff;
-    border: 1px solid rgba(0,140,255,0.2);
+.point-status-banner.psb-player {
+    background: rgba(0,212,224,0.08);
+    color: var(--cyan);
+    border-color: var(--cyan);
 }
-.status-mp {
-    background: rgba(255,124,42,0.12);
+.point-status-banner.psb-ai {
+    background: rgba(255,124,42,0.08);
     color: var(--orange);
-    border: 1px solid rgba(255,124,42,0.25);
+    border-color: var(--orange);
+}
+.psb-who {
+    font-size: 9px;
+    font-weight: 600;
+    opacity: 0.7;
+    letter-spacing: 0.1em;
+}
+.psb-label {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.05em;
 }
 
 /* Centre divider */
@@ -284,21 +323,6 @@ body {
     font-weight: 500;
     color: var(--text-3);
     white-space: nowrap;
-}
-.deuce-wrap { min-height: 18px; display: flex; align-items: center; }
-.deuce-pill {
-    display: inline-flex;
-    align-items: center;
-    padding: 2px 10px;
-    border-radius: 20px;
-    font-size: 9px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    background: rgba(255,201,71,0.1);
-    color: var(--gold);
-    border: 1px solid rgba(255,201,71,0.2);
-    animation: popIn 0.18s cubic-bezier(0.34,1.56,0.64,1);
 }
 @keyframes popIn {
     from { opacity: 0; transform: scale(0.8); }
@@ -533,17 +557,22 @@ kbd {
 .slider:disabled { opacity: 0.35; cursor: default; }
 
 .slider-markers {
-    display: flex;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
     align-items: center;
-    font-size: clamp(9px, 0.7vw, 11px);
+    font-size: clamp(8px, 0.65vw, 10px);
     color: var(--text-3);
+    gap: 2px;
 }
+.slider-markers span:first-child { text-align: left; }
+.slider-markers span:last-child  { text-align: right; }
 .slider-val {
     font-family: var(--mono);
-    font-size: clamp(10px, 0.8vw, 12px);
+    font-size: clamp(9px, 0.75vw, 11px);
     font-weight: 600;
     color: var(--text-2);
+    text-align: center;
+    white-space: nowrap;
 }
 
 /* Toggles */

@@ -273,6 +273,7 @@ function doResume() {
     isPaused       = false;
     running        = true;
     startTimestamp = performance.now();
+    lastTime       = null;   // FIX: prevents a large dt spike on the first resumed frame
     if (pauseBtn) pauseBtn.classList.remove('paused');
     hideOverlay();
 }
@@ -297,9 +298,8 @@ function doRestart() {
 
 // ─── UI refresh ────────────────────────────────────────────────────────────────
 function refreshUI() {
-    const adv      = getAdvantage(score);
-    const deuce    = isDeuce(score);
-    const ptStatus = getPointStatus(score);
+    const adv   = getAdvantage(score);
+    const deuce = isDeuce(score);
 
     // Scores
     const playerScoreEl = document.getElementById('playerScore');
@@ -307,16 +307,39 @@ function refreshUI() {
     if (playerScoreEl) playerScoreEl.textContent = (adv === 'player') ? 'ADV' : score.points.player;
     if (aiScoreEl)     aiScoreEl.textContent     = (adv === 'ai')     ? 'ADV' : score.points.ai;
 
-    // Status pills under each score
+    // ── Shared point status banner (game point / match point) ─────
+    const ptStatus  = getPointStatus(score);
+    const banner    = document.getElementById('pointStatusBanner');
+    const bannerWho = document.getElementById('pointStatusWho');
+    const bannerLbl = document.getElementById('pointStatusLabel');
+
+    // Find if either side has a status (prefer match point over game point)
+    let activeSide = null, activeSt = null;
     for (const who of ['player', 'ai']) {
-        const st = ptStatus[who];
-        const el = document.getElementById(`${who}Status`);
-        if (!el) continue;
-        if (!st) { el.textContent = ''; el.className = 'status-pill'; continue; }
-        el.textContent = st.type === 'matchPoint'
-            ? `Match point (${st.count})`
-            : `Game point (${st.count})`;
-        el.className = 'status-pill ' + (st.type === 'matchPoint' ? 'status-mp' : 'status-gp');
+        if (ptStatus[who]) {
+            if (!activeSt || ptStatus[who].type === 'matchPoint') {
+                activeSide = who;
+                activeSt   = ptStatus[who];
+            }
+        }
+    }
+
+    if (banner) {
+        if (activeSt && !deuce) {
+            const name  = activeSide === 'player' ? getPlayerName() : 'AI';
+            const isMP  = activeSt.type === 'matchPoint';
+            const n     = activeSt.count;
+            const label = isMP
+                ? (n === 1 ? 'Match Point' : `${n} Match Points`)
+                : (n === 1 ? 'Game Point'  : `${n} Game Points`);
+
+            banner.style.display = 'inline-flex';
+            banner.className     = `point-status-banner psb-${activeSide}`;
+            if (bannerWho) bannerWho.textContent = name;
+            if (bannerLbl) bannerLbl.textContent = label;
+        } else {
+            banner.style.display = 'none';
+        }
     }
 
     // Deuce pill
