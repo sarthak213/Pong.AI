@@ -34,21 +34,25 @@
                     <input id="playerName" class="name-input" value="Player"
                            maxlength="14" autocomplete="off" spellcheck="false">
                     <div id="playerScore" class="score player-score">0</div>
-                    <div id="playerStatus" class="status-pill"></div>
                 </div>
 
                 <div class="score-divider">
                     <span class="vs-label">VS</span>
                     <span class="game-badge" id="gameNumber"></span>
-                    <div class="deuce-wrap">
-                        <span id="deuceStatus" class="deuce-pill" style="display:none;"></span>
-                    </div>
                 </div>
 
                 <div class="player-col ai-col" id="aiCol">
                     <span class="name-label">AI</span>
                     <div id="aiScore" class="score ai-score">0</div>
-                    <div id="aiStatus" class="status-pill"></div>
+                </div>
+            </div>
+
+            <!-- Shared status banner: deuce pill OR game/match point banner, centred below scores -->
+            <div class="status-banner-wrap">
+                <span id="deuceStatus" class="deuce-pill" style="display:none;"></span>
+                <div id="pointStatusBanner" class="point-status-banner" style="display:none;">
+                    <span id="pointStatusWho" class="psb-who"></span>
+                    <span id="pointStatusLabel" class="psb-label"></span>
                 </div>
             </div>
 

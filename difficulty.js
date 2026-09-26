@@ -69,7 +69,10 @@ export const DIFFICULTY = {
         aggression:   0.22,
         aiMaxSpeed:   7.5,
         deadzone:     5,
-        extremeAim:   false,
+        extremeAim:   true,
+        // Hard: looks for angles but not extreme ones — occasional setup shots
+        aimAggression: 0.55,  // 0=centre return, 1=maximum angle, extremeAim uses full trig
+        trapSetup:     false, // no multi-shot patterns
         fatigueOnset: 10,
         fatigueDepth: 0.45,
     },
@@ -78,11 +81,14 @@ export const DIFFICULTY = {
         startSpeed: 9,
         maxSpeed:   21,
         rampTau:    7,
-        blendFactor:  0.57,   // fully predictive
+        blendFactor:  0.57,
         aggression:   0.26,
         aiMaxSpeed:   8.5,
         deadzone:     4,
         extremeAim:   true,
+        // Expert: actively hunts angles and sets up consecutive winning shots
+        aimAggression: 0.80,
+        trapSetup:     true,  // will aim at player paddle edge to create awkward returns
         fatigueOnset: 14,
         fatigueDepth: 0.35,
     },
@@ -93,11 +99,14 @@ export const DIFFICULTY = {
         startSpeed: 10,
         maxSpeed:   26,
         rampTau:    5,
-        blendFactor:  0.72,   // highly predictive — AI tracks ball with great precision
-        aggression:   0.50,   // very aggressive — AI moves full distance to target each frame
+        blendFactor:  0.72,
+        aggression:   0.50,
         aiMaxSpeed:   10.5,
         deadzone:     1,
         extremeAim:   true,
+        // Extreme: maximum angle hunting, no mercy
+        aimAggression: 0.97,
+        trapSetup:     true,
         fatigueOnset: 20,
         fatigueDepth: 0.35,
     },

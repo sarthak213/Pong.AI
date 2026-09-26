@@ -156,6 +156,14 @@ function updatePointStateCounters(state, target) {
 }
 
 // Returns display info for each side: null | { type: 'gamePoint'|'matchPoint', count: n }
+// count semantics (v4.0):
+//   gamePoint  — number of consecutive points needed to win game at current score gap
+//                e.g. 6-2 → player has 4 game points (needs 1 win but is 4 ahead, so show 4? No —
+//                actually: count = target - opponent score when leader is at target-1)
+//                Simpler: count = how many game points the leader holds = their score - (target-2)
+//                when score >= target-1. If exactly one, just show "Game Point".
+//   matchPoint — gamesNeeded - gamesWon[who] = games still needed to win.
+//                If exactly one, just show "Match Point".
 export function getPointStatus(state) {
     const target = WIN_SCORE;
     const gamesNeeded = MATCH_FORMATS[state.matchFormat]?.gamesNeeded ?? 2;
@@ -165,22 +173,29 @@ export function getPointStatus(state) {
     const a = state.points.ai;
     const bothInDeuceZone = p >= target - 1 && a >= target - 1;
 
-    // Suppress ALL pills during deuce AND during advantage.
-    // Equal scores = deuce, unequal in deuce zone = advantage.
-    // In both cases the score display (ADV / numeric) is sufficient.
-    if (bothInDeuceZone) return result;
+    // Only suppress during exact deuce (equal scores).
+    // During advantage (unequal scores in deuce zone) the banner should still show
+    // so the player knows who is on match/game point.
+    if (bothInDeuceZone && p === a) return result;
 
     for (const who of ['player', 'ai']) {
-        // Simulate scoring the next point and check if it wins the game.
+        const other = who === 'player' ? 'ai' : 'player';
+
+        // Simulate next point
         const nextPoints = { ...state.points, [who]: state.points[who] + 1 };
         const wouldWinGame = checkGameWin(nextPoints, target) === who;
         if (!wouldWinGame) continue;
 
         const wouldWinMatch = (state.gamesWon[who] + 1) >= gamesNeeded;
+
         if (wouldWinMatch) {
-            result[who] = { type: 'matchPoint', count: state.matchPointCount[who] };
+            // Match point count = score difference (how dominant the lead is)
+            const pointDiff = Math.max(1, state.points[who] - state.points[other]);
+            result[who] = { type: 'matchPoint', count: pointDiff };
         } else {
-            result[who] = { type: 'gamePoint',  count: state.gamePointCount[who] };
+            // Game point count = score difference
+            const pointDiff = Math.max(1, state.points[who] - state.points[other]);
+            result[who] = { type: 'gamePoint', count: pointDiff };
         }
     }
     return result;
