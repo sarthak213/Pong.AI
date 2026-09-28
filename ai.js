@@ -10,7 +10,7 @@ export function moveAI({ aiY, ball, ballRadius, paddleH, aiX, displayH,
 
     const cfg = extremeMode
         ? DIFFICULTY.extreme
-        : (DIFFICULTY[difficulty] ?? DIFFICULTY[3]);
+        : (DIFFICULTY[difficulty] ?? DIFFICULTY[2]);
 
     // ── Fatigue ────────────────────────────────────────────────
     const fatigue       = getFatigue(cfg, rallyHits);

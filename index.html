@@ -1,175 +1,263 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-game-theme="neon">
 <head>
     <meta charset="UTF-8">
-    <title>Pong.AI</title>
+    <title>Pong.AI — Beat the AI at Pong</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Single-player Pong against an adaptive AI. Four difficulties, four themes, powerups and tennis-style deuce scoring. Climb the leaderboard.">
+    <script>try{var t=localStorage.getItem('pongai-theme');if(['neon','retro','synthwave','arctic'].indexOf(t)>=0)document.documentElement.dataset.gameTheme=t;}catch(e){}</script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="icon" href="favicon.ico" sizes="48x48">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <meta name="theme-color" content="#090c10">
     <link rel="stylesheet" href="styles.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js"></script>
 </head>
 <body>
-<div class="app">
 
-    <!--
-        Layout strategy: every row is a 3-column grid with the same
-        column template as .main. This hard-locks the brand, scoreboard,
-        actions, footer, and sidebar panels to the canvas column edges.
-        Nothing floats free.
-    -->
+<header class="site-header">
+    <div class="site-header-inner">
+        <a class="brand" href="index.html" aria-label="Pong.AI home">
+            <span class="brand-ping"></span>
+            <span>Pong<span class="dot">.</span>AI</span>
+        </a>
+        <nav class="site-nav" aria-label="Main">
+            <a href="index.html" aria-current="page"><i data-lucide="gamepad-2"></i><span class="nav-label">Play</span></a>
+            <a href="leaderboard.html"><i data-lucide="trophy"></i><span class="nav-label">Leaderboard</span></a>
+            <a href="how-to-play.html"><i data-lucide="book-open"></i><span class="nav-label">How to Play</span></a>
+        </nav>
+        <div class="header-themes theme-switcher" role="radiogroup" aria-label="Theme" data-theme-picker="swatch"></div>
+    </div>
+</header>
 
-    <!-- ── Row 1: top bar ──────────────────────────────────────── -->
-    <div class="layout-row top-bar">
-        <!-- Col 1: brand -->
-        <div class="col-brand">
-            <span class="brand-dot"></span>
-            <span class="brand-text">Pong.AI</span>
+<!-- ═══ Menu ═══════════════════════════════════════════════════ -->
+<main id="screenMenu" class="container">
+    <div class="menu-grid">
+        <div class="stack">
+            <div class="fade-up" style="--i:0">
+                <p class="hero-pill"><i data-lucide="swords"></i> You vs. the AI</p>
+                <h1 class="hero-title">
+                    Beat the <span class="glow-text-primary">machine</span><br>
+                    at <span class="glow-text-ai">Pong</span>.
+                </h1>
+                <p class="hero-text">
+                    First to 7 wins the game. At 6–6 it's <strong class="text-gold">deuce</strong>:
+                    take the advantage, then one more point, just like tennis.
+                </p>
+            </div>
+
+            <section class="card pad-lg shadow-soft fade-up" style="--i:1" aria-label="Match setup">
+                <div class="field">
+                    <div class="section-label"><i data-lucide="user"></i> Player name</div>
+                    <input id="playerName" class="text-input" maxlength="14" placeholder="Your name"
+                           autocomplete="off" spellcheck="false" aria-label="Player name">
+                </div>
+
+                <div class="field">
+                    <div class="section-label"><i data-lucide="gauge"></i> AI difficulty</div>
+                    <div class="diff-grid" id="diffGrid" role="radiogroup" aria-label="AI difficulty"></div>
+                    <p class="field-note" id="diffBlurb"></p>
+                </div>
+
+                <div class="field theme-switcher">
+                    <div class="section-label"><i data-lucide="palette"></i> Theme</div>
+                    <div class="theme-grid" role="radiogroup" aria-label="Theme" data-theme-picker="tile"></div>
+                </div>
+
+                <div class="field">
+                    <div class="section-label"><i data-lucide="trophy"></i> Match format</div>
+                    <div class="seg" id="formatSeg" role="radiogroup" aria-label="Match format">
+                        <button role="radio" data-format="one">One-shot</button>
+                        <button role="radio" data-format="best3">Best of 3</button>
+                        <button role="radio" data-format="best5">Best of 5</button>
+                        <button role="radio" data-format="best7">Best of 7</button>
+                    </div>
+                </div>
+
+                <div class="toggle-row field">
+                    <div class="toggle-row-label">
+                        <i data-lucide="route" class="text-ai"></i>
+                        <div>
+                            <div>Trajectory visualizer</div>
+                            <div class="toggle-row-sub">Shows where the ball will reach the AI paddle.</div>
+                        </div>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" id="menuTrajToggle" aria-label="Toggle trajectory visualizer">
+                        <span class="switch-track"></span>
+                    </label>
+                </div>
+
+                <button id="startBtn" class="btn btn-primary btn-lg shadow-lift"><i data-lucide="play"></i> Start match</button>
+                <p id="startError" class="start-error" hidden>Enter a name to start.</p>
+            </section>
         </div>
 
-        <!-- Col 2: scoreboard + match dots (centred over canvas) -->
-        <div class="col-centre">
-            <div class="scoreboard">
-                <div class="player-col" id="playerCol">
-                    <input id="playerName" class="name-input" value="Player"
-                           maxlength="14" autocomplete="off" spellcheck="false">
-                    <div id="playerScore" class="score player-score">0</div>
-                </div>
-
-                <div class="score-divider">
-                    <span class="vs-label">VS</span>
-                    <span class="game-badge" id="gameNumber"></span>
-                </div>
-
-                <div class="player-col ai-col" id="aiCol">
-                    <span class="name-label">AI</span>
-                    <div id="aiScore" class="score ai-score">0</div>
-                </div>
-            </div>
-
-            <!-- Shared status banner: deuce pill OR game/match point banner, centred below scores -->
-            <div class="status-banner-wrap">
-                <span id="deuceStatus" class="deuce-pill" style="display:none;"></span>
-                <div id="pointStatusBanner" class="point-status-banner" style="display:none;">
-                    <span id="pointStatusWho" class="psb-who"></span>
-                    <span id="pointStatusLabel" class="psb-label"></span>
-                </div>
-            </div>
-
-            <!-- Match track sits directly below scores, centred over canvas -->
-            <div class="match-track-wrap" id="matchTrackWrap" style="display:none;">
-                <div class="match-track" id="matchTrack"></div>
-            </div>
-        </div>
-
-        <!-- Col 3: action buttons -->
-        <div class="col-actions">
-            <button id="pauseBtn" class="btn btn-ghost">
-                <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                    <rect x="2" y="1.5" width="3.5" height="10" rx="1" fill="currentColor"/>
-                    <rect x="7.5" y="1.5" width="3.5" height="10" rx="1" fill="currentColor"/>
+        <div class="stack">
+            <div class="card court-preview shadow-lift fade-up" style="--i:2">
+                <svg viewBox="0 0 300 200" role="img" aria-label="Animated Pong rally preview">
+                    <defs>
+                        <radialGradient id="cp-ball" cx="35%" cy="35%" r="65%">
+                            <stop offset="0%" stop-color="#ffffff"/>
+                            <stop offset="55%" stop-color="#ddeeff"/>
+                            <stop offset="100%" stop-color="#88aacc"/>
+                        </radialGradient>
+                    </defs>
+                    <line class="cp-net" x1="150" y1="0" x2="150" y2="200" stroke-dasharray="5 8"/>
+                    <rect class="cp-player" x="8" y="0" width="6" height="36" rx="2"/>
+                    <rect class="cp-ai" x="286" y="0" width="6" height="36" rx="2"/>
+                    <circle class="cp-ball" cx="0" cy="0" r="5" fill="url(#cp-ball)"/>
                 </svg>
-                <span id="pauseBtnLabel">Pause</span>
-            </button>
-            <button id="restartBtn" class="btn btn-primary">Restart</button>
+                <div class="cp-scores"><span class="glow-text-primary">6</span><span class="glow-text-ai">6</span></div>
+                <div class="cp-deuce"><span class="pill-gold">Deuce</span></div>
+            </div>
+
+            <section class="control-cards fade-up" style="--i:3" aria-label="Controls">
+                <div class="card control-card shadow-soft">
+                    <span class="chip tone-primary"><i data-lucide="mouse-pointer-2"></i></span>
+                    <div><strong>Mouse / touch</strong><span>Move to steer your paddle</span></div>
+                </div>
+                <div class="card control-card shadow-soft">
+                    <span class="chip tone-gold"><i data-lucide="zap"></i></span>
+                    <div><strong>W — Speed</strong><span>Faster paddle, slower AI</span></div>
+                </div>
+                <div class="card control-card shadow-soft">
+                    <span class="chip tone-ai"><i data-lucide="maximize-2"></i></span>
+                    <div><strong>D — Size</strong><span>Paddle grows to 160%</span></div>
+                </div>
+            </section>
+
+            <section class="card pad shadow-soft fade-up" style="--i:4" aria-label="Top scores">
+                <div class="panel-head">
+                    <h2 class="panel-title"><i data-lucide="trophy" class="text-gold"></i> Top scores · <span class="muted" id="menuTopDiff"></span></h2>
+                    <a class="btn btn-secondary btn-sm" href="leaderboard.html">View all <i data-lucide="arrow-right"></i></a>
+                </div>
+                <div id="menuTop"></div>
+                <p class="panel-foot"><i data-lucide="scale"></i> Two powerups per game, one per point. None in Extreme.</p>
+            </section>
         </div>
     </div>
+</main>
 
-    <!-- ── Row 2: main (sidebars + canvas) ─────────────────────── -->
-    <main class="layout-row main">
+<!-- ═══ Game ═══════════════════════════════════════════════════ -->
+<main id="screenGame" class="container game" hidden>
+    <section class="card hud shadow-soft" aria-label="Scoreboard">
+        <div class="score-block player">
+            <span class="chip tone-primary"><i data-lucide="user"></i></span>
+            <div class="sb-info">
+                <div class="sb-name" id="hudPlayerName">Player</div>
+                <div class="sb-pips" id="playerPips"></div>
+                <div class="sb-status" id="playerStatus"></div>
+            </div>
+            <span class="sb-points glow-text-primary" id="playerScore">0</span>
+        </div>
 
-        <aside class="sidebar sidebar-left">
-            <div class="sidebar-section" id="extremePanel">
-                <div class="section-label">Mode</div>
-                <div class="mode-indicator" id="extremeStatusText">Normal</div>
+        <div class="hud-centre">
+            <span id="hudFirst" class="hud-first">first to 7</span>
+            <span id="hudDeuce" class="deuce-pill" hidden><i data-lucide="flame"></i><span id="hudDeuceText">Deuce</span></span>
+            <span class="hud-meta" id="hudMeta"></span>
+        </div>
+
+        <div class="score-block ai">
+            <span class="chip tone-ai"><i data-lucide="bot"></i></span>
+            <div class="sb-info">
+                <div class="sb-name">AI</div>
+                <div class="sb-pips" id="aiPips"></div>
+                <div class="sb-status" id="aiStatus"></div>
             </div>
-            <div class="sidebar-section">
-                <div class="section-label">Powerups</div>
-                <div class="pip-track" id="powerupLeft">
-                    <span class="pip pip-on"></span>
-                    <span class="pip pip-on"></span>
+            <span class="sb-points glow-text-ai" id="aiScore">0</span>
+        </div>
+    </section>
+
+    <div class="game-grid">
+        <div class="court shadow-lift" id="court">
+            <canvas id="pong" width="900" height="600" role="img"
+                    aria-label="Pong court. Move your mouse up and down to control the left paddle."></canvas>
+            <div class="flash" id="flash"><span></span></div>
+            <button type="button" class="court-overlay shadow-lift" id="overlay">
+                <span id="ovPlay" class="ov-play"><i data-lucide="play"></i></span>
+                <span id="ovCrown" class="ov-crown" hidden><i data-lucide="crown"></i></span>
+                <span id="message">Click or press Space to serve</span>
+            </button>
+        </div>
+
+        <aside class="side" aria-label="Game controls">
+            <div class="card pad shadow-soft">
+                <div class="pu-head">
+                    <span>Powerups</span>
+                    <span class="pu-pips" id="powerupPips"></span>
                 </div>
-                <div class="active-powerup" id="powerupActive">None active</div>
-                <div class="key-row">
-                    <div class="key-item"><kbd>W</kbd><span>Speed</span></div>
-                    <div class="key-item"><kbd>D</kbd><span>Size</span></div>
+                <div class="pu-grid">
+                    <button class="pu-btn speed" data-powerup="speed"><i data-lucide="zap"></i>Speed<kbd>W</kbd></button>
+                    <button class="pu-btn size" data-powerup="size"><i data-lucide="maximize-2"></i>Size<kbd>D</kbd></button>
                 </div>
+                <p class="pu-note" id="powerupNote"></p>
             </div>
+
+            <div class="card toggle-row shadow-soft">
+                <span class="toggle-row-label"><i data-lucide="route" class="text-ai"></i> Trajectory</span>
+                <label class="switch">
+                    <input type="checkbox" id="trajToggle" aria-label="Toggle trajectory visualizer">
+                    <span class="switch-track"></span>
+                </label>
+            </div>
+
+            <div class="side-actions">
+                <button id="pauseBtn" class="btn btn-primary">
+                    <span class="when-running"><i data-lucide="pause"></i> Pause</span>
+                    <span class="when-paused"><i data-lucide="play"></i> Resume</span>
+                </button>
+                <button id="restartBtn" class="btn btn-secondary"><i data-lucide="rotate-ccw"></i> Restart</button>
+                <button id="quitBtn" class="btn btn-danger"><i data-lucide="log-out"></i> Quit</button>
+            </div>
+
+            <p class="side-tip"><kbd>Space</kbd> serve / pause · move the mouse, or drag on touch screens, to steer your paddle.</p>
         </aside>
+    </div>
+</main>
 
-        <section class="arena">
-            <canvas id="pong" width="900" height="600"></canvas>
-            <div class="overlay" id="overlay">
-                <p id="message" class="overlay-msg">Click or press Space to start</p>
+<!-- ═══ Game over ══════════════════════════════════════════════ -->
+<main id="screenOver" class="container" hidden>
+    <div class="over-grid">
+        <section class="card pad-lg result-card shadow-lift fade-up" id="resultCard" aria-label="Match result">
+            <div class="result-icon" id="resultIcon"></div>
+            <h1 class="result-title" id="resultTitle"></h1>
+            <p class="result-sub" id="resultSub"></p>
+
+            <div class="result-games">
+                <div><div class="who" id="resultPlayerName"></div><div class="num text-primary" id="resultGamesPlayer">0</div></div>
+                <div class="dash">–</div>
+                <div><div class="who">AI</div><div class="num text-ai" id="resultGamesAi">0</div></div>
+            </div>
+            <p class="result-final" id="resultFinal"></p>
+
+            <div class="stat-grid" id="statGrid"></div>
+
+            <div class="score-box">
+                <div class="score-box-label">Leaderboard score</div>
+                <div class="score-box-val" id="resultScore">0</div>
+                <div class="save-status" id="saveStatus" aria-live="polite"></div>
+            </div>
+
+            <div class="over-actions">
+                <button id="rematchBtn" class="btn btn-primary shadow-lift"><i data-lucide="rotate-ccw"></i> Rematch</button>
+                <button id="menuBtn" class="btn btn-secondary"><i data-lucide="house"></i> Menu</button>
             </div>
         </section>
 
-        <aside class="sidebar sidebar-right">
-            <div class="sidebar-section">
-                <div class="section-label">AI Difficulty</div>
-                <div class="slider-group">
-                    <input id="aiDifficulty" type="range" min="1" max="5" value="3" class="slider">
-                    <div class="slider-markers">
-                        <span>Beginner</span>
-                        <span id="aiDiffLabel" class="slider-val">3 — Medium</span>
-                        <span>Expert</span>
-                    </div>
-                </div>
+        <section class="card pad shadow-soft fade-up" style="--i:2" aria-label="Leaderboard">
+            <div class="panel-head">
+                <h2 class="panel-title"><i data-lucide="list-ordered" class="text-gold"></i> Top <span id="overTopDiff"></span></h2>
+                <a class="btn btn-secondary btn-sm" href="leaderboard.html">Full leaderboard</a>
             </div>
-            <div class="sidebar-section toggles-section">
-                <div class="toggle-row">
-                    <div class="section-label">Trajectory</div>
-                    <label class="toggle">
-                        <input id="trajToggle" type="checkbox" checked>
-                        <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                    </label>
-                </div>
-                <div class="toggle-row">
-                    <div class="section-label">Extreme</div>
-                    <label class="toggle">
-                        <input id="extremeMode" type="checkbox">
-                        <span class="toggle-track extreme-track"><span class="toggle-thumb"></span></span>
-                    </label>
-                </div>
-            </div>
-        </aside>
+            <div id="overTop"></div>
+        </section>
+    </div>
+</main>
 
-    </main>
-
-    <!-- ── Row 3: footer ───────────────────────────────────────── -->
-    <footer class="layout-row footer">
-        <div class="tab-cluster">
-            <span class="footer-label">Format</span>
-            <div class="format-group">
-                <button class="fmt-btn" data-format="one">One-shot</button>
-                <button class="fmt-btn active" data-format="best3">Best of 3</button>
-                <button class="fmt-btn" data-format="best5">Best of 5</button>
-                <button class="fmt-btn" data-format="best7">Best of 7</button>
-            </div>
-        </div>
-
-        <div class="footer-sep"></div>
-
-        <div class="tab-cluster">
-            <span class="footer-label">Theme</span>
-            <div class="theme-group" id="themeGroup">
-                <button class="theme-btn active" data-theme="neon">
-                    <span class="theme-swatch" style="--a:#00d4e0;--b:#ff7c2a"></span>Neon
-                </button>
-                <button class="theme-btn" data-theme="retro">
-                    <span class="theme-swatch" style="--a:#ffffff;--b:#aaaaaa"></span>Retro
-                </button>
-                <button class="theme-btn" data-theme="synthwave">
-                    <span class="theme-swatch" style="--a:#e040fb;--b:#00e5ff"></span>Synthwave
-                </button>
-                <button class="theme-btn" data-theme="arctic">
-                    <span class="theme-swatch" style="--a:#0088cc;--b:#e05500"></span>Arctic
-                </button>
-            </div>
-        </div>
-    </footer>
-
-</div>
 <script type="module" src="main.js"></script>
 </body>
 </html>

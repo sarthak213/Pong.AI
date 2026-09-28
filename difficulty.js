@@ -1,131 +1,105 @@
-// difficulty.js — all per-level parameters for ball speed, AI behaviour, and fatigue.
+// difficulty.js — three difficulty levels + Extreme mode.
 //
 // Speed model: asymptotic ramp
 //   speed(t) = maxSpeed - (maxSpeed - startSpeed) * e^(-t / rampTau)
-//   rampTau: time constant in seconds. At 1×tau ball is ~63% to max, at 3×tau ~95%.
 //
 // AI model:
-//   blendFactor  — 0=tracks live ball Y only, 1=tracks fully predicted contact Y
-//   aggression   — how aggressively the paddle snaps toward its target per frame
-//   aiMaxSpeed   — paddle speed cap px/frame at 60fps (scaled by gameplayScale)
-//   deadzone     — pixels of delta ignored to prevent jitter
-//   extremeAim   — if true, AI targets steep outgoing angles rather than just contact
+//   blendFactor    — 0=tracks live ball Y, 1=fully predicted contact Y
+//   aggression     — paddle snap speed toward target per frame
+//   aiMaxSpeed     — paddle speed cap px/frame at 60fps (scaled by gameplayScale)
+//   deadzone       — pixels of delta ignored to prevent jitter
+//   extremeAim     — all levels use angle-hunting; scaled by aimAggression
+//   aimAggression  — 0=safe centre return, 1=maximum corner hunting
+//   trapSetup      — if true, AI targets player paddle edge to force awkward returns
 //
-// Fatigue model (Medium and above only):
-//   fatigue(n) = 1 - e^(-n / fatigueOnset)   where n = rally hit count
-//   Effective parameter = base * (1 - fatigue(n) * fatigueDepth)
-//   fatigueOnset — hit count at which fatigue reaches ~63% of its maximum effect.
-//                  Higher = later onset, AI stays sharp longer into the rally.
-//   fatigueDepth — maximum fractional degradation at full fatigue (0..1).
-//                  0.55 = AI loses up to 55% of its speed/predictability.
-//   Levels 1 and 2 have no fatigue (fatigueOnset: null).
+// Fatigue model:
+//   fatigue(n) = 1 - e^(-n / fatigueOnset)   n = rally hit count
+//   Effective param = base * (1 - fatigue * fatigueDepth)
+//   All three levels have fatigue — Easy fatigues fastest and deepest.
 
 export const DIFFICULTY = {
     1: {
-        label:      'Beginner',
-        startSpeed: 5,
-        maxSpeed:   9,
-        rampTau:    20,
-        blendFactor:  0.0,   // tracks live ball only — zero prediction
-        aggression:   0.06,
-        aiMaxSpeed:   2.5,
+        label:        'Easy',
+        startSpeed:   5,
+        maxSpeed:     10,
+        rampTau:      14,
+
+        blendFactor:  0.09,   // mostly tracks live ball — low prediction
+        aggression:   0.07,
+        aiMaxSpeed:   3.5,
         deadzone:     10,
-        extremeAim:   false,
-        fatigueOnset: null,  // no fatigue
-        fatigueDepth: 0,
-    },
-    2: {
-        label:      'Easy',
-        startSpeed: 6,
-        maxSpeed:   11,
-        rampTau:    15,
-        blendFactor:  0.1,   // 10% prediction — mostly reactive
-        aggression:   0.08,
-        aiMaxSpeed:   3.89,
-        deadzone:     9,
-        extremeAim:   false,
-        fatigueOnset: null,  // no fatigue
-        fatigueDepth: 0,
-    },
-    3: {
-        label:      'Medium',
-        startSpeed: 7,
-        maxSpeed:   14,
-        rampTau:    12,
-        blendFactor:  0.28,  // ~30% prediction — noticeable but beatable
-        aggression:   0.13,
-        aiMaxSpeed:   5.5,
-        deadzone:     7,
-        extremeAim:   false,
-        fatigueOnset: 6,
+        extremeAim:   true,
+        aimAggression: 0.25,  // gentle angles — mostly safe returns
+        trapSetup:    false,
+
+        fatigueOnset: 8,      // tires quickly — long rallies heavily punish Easy AI
         fatigueDepth: 0.55,
     },
-    4: {
-        label:      'Hard',
-        startSpeed: 8,
-        maxSpeed:   17,
-        rampTau:    10,
-        blendFactor:  0.42,  // ~40% prediction — strong but still exploitable
-        aggression:   0.22,
-        aiMaxSpeed:   7.5,
-        deadzone:     5,
+    2: {
+        label:        'Medium',
+        startSpeed:   7,
+        maxSpeed:     15,
+        rampTau:      11,
+
+        blendFactor:  0.37,   // ~40% prediction — reads the ball but not perfectly
+        aggression:   0.15,
+        aiMaxSpeed:   6.5,
+        deadzone:     7,
         extremeAim:   true,
-        // Hard: looks for angles but not extreme ones — occasional setup shots
-        aimAggression: 0.55,  // 0=centre return, 1=maximum angle, extremeAim uses full trig
-        trapSetup:     false, // no multi-shot patterns
-        fatigueOnset: 10,
+        aimAggression: 0.55,  // hunts moderate angles, not extreme corners
+        trapSetup:    false,
+
+        fatigueOnset: 12,
         fatigueDepth: 0.45,
     },
-    5: {
-        label:      'Expert',
-        startSpeed: 9,
-        maxSpeed:   21,
-        rampTau:    7,
-        blendFactor:  0.57,
-        aggression:   0.26,
-        aiMaxSpeed:   8.5,
+    3: {
+        label:        'Hard',
+        startSpeed:   9,
+        maxSpeed:     20,
+        rampTau:      7,
+
+        blendFactor:  0.50,   // highly predictive
+        aggression:   0.28,
+        aiMaxSpeed:   9.5,
         deadzone:     4,
         extremeAim:   true,
-        // Expert: actively hunts angles and sets up consecutive winning shots
-        aimAggression: 0.80,
-        trapSetup:     true,  // will aim at player paddle edge to create awkward returns
-        fatigueOnset: 14,
-        fatigueDepth: 0.35,
+        aimAggression: 0.72,  // actively hunts corners and sets up patterns
+        trapSetup:    true,
+
+        fatigueOnset: 15,     // stays sharp deep into a rally
+        fatigueDepth: 0.40,
     },
 
     // Extreme: not on the slider, activated by the toggle
     extreme: {
-        label:      'Extreme',
-        startSpeed: 10,
-        maxSpeed:   26,
-        rampTau:    5,
-        blendFactor:  0.72,
-        aggression:   0.50,
-        aiMaxSpeed:   10.5,
+        label:        'Extreme',
+        startSpeed:   10,
+        maxSpeed:     26,
+        rampTau:      5,
+
+        blendFactor:  0.75,
+        aggression:   0.55,
+        aiMaxSpeed:   12,
         deadzone:     1,
         extremeAim:   true,
-        // Extreme: maximum angle hunting, no mercy
         aimAggression: 0.97,
-        trapSetup:     true,
+        trapSetup:    true,
+
         fatigueOnset: 20,
         fatigueDepth: 0.35,
     },
 };
 
-// Returns the fatigue multiplier (0..1) for a given rally hit count.
-// 0 = no fatigue yet, 1 = fully fatigued.
 export function getFatigue(cfg, rallyHits) {
     if (!cfg.fatigueOnset || rallyHits === 0) return 0;
     return 1 - Math.exp(-rallyHits / cfg.fatigueOnset);
 }
 
-// Apply fatigue to a base parameter value.
-// Returns base * (1 - fatigue * depth), clamped to never go below 0.
 export function applyFatigue(base, fatigue, depth) {
     return Math.max(0, base * (1 - fatigue * depth));
 }
 
 export function getDifficultyLabel(level, isExtreme) {
     if (isExtreme) return 'Extreme';
-    return DIFFICULTY[level]?.label ?? 'Medium';
+    return DIFFICULTY[level]?.label ?? DIFFICULTY[2].label;
 }

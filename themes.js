@@ -1,30 +1,12 @@
 // themes.js — all theme definitions
-// Each theme controls: UI CSS vars, canvas bg, paddle style, ball style, net style, trajectory colour
+// Each theme controls: picker swatches, canvas bg, paddle style, ball style, net style, trajectory colour
 
 export const THEMES = {
     neon: {
         id: 'neon',
+        swatch: ['#00d4e0', '#ff7c2a'],   // [player, AI] colours for theme pickers
+        preview: '#090c10',
         name: 'Neon',
-        // CSS custom props applied to :root
-        css: {
-            '--bg':           '#090c10',
-            '--bg2':          '#0d1117',
-            '--surface':      'rgba(255,255,255,0.03)',
-            '--surface-hover':'rgba(255,255,255,0.055)',
-            '--border':       'rgba(255,255,255,0.06)',
-            '--border-mid':   'rgba(255,255,255,0.10)',
-            '--text':         '#e2eaf4',
-            '--text-2':       '#8899aa',
-            '--text-3':       '#4d6070',
-            '--cyan':         '#00d4e0',
-            '--cyan-dim':     'rgba(0,212,224,0.12)',
-            '--cyan-glow':    'rgba(0,212,224,0.25)',
-            '--orange':       '#ff7c2a',
-            '--orange-dim':   'rgba(255,124,42,0.12)',
-            '--orange-glow':  'rgba(255,124,42,0.25)',
-            '--red':          '#ff4560',
-            '--gold':         '#ffc947',
-        },
         canvas: {
             bg:           '#090c10',
             vignette:     true,
@@ -43,26 +25,9 @@ export const THEMES = {
 
     retro: {
         id: 'retro',
+        swatch: ['#ffffff', '#aaaaaa'],   // [player, AI] colours for theme pickers
+        preview: '#000000',
         name: 'Retro',
-        css: {
-            '--bg':           '#0a0a0a',
-            '--bg2':          '#111111',
-            '--surface':      'rgba(255,255,255,0.04)',
-            '--surface-hover':'rgba(255,255,255,0.07)',
-            '--border':       'rgba(255,255,255,0.08)',
-            '--border-mid':   'rgba(255,255,255,0.14)',
-            '--text':         '#e8e8e8',
-            '--text-2':       '#888888',
-            '--text-3':       '#444444',
-            '--cyan':         '#ffffff',
-            '--cyan-dim':     'rgba(255,255,255,0.1)',
-            '--cyan-glow':    'rgba(255,255,255,0.2)',
-            '--orange':       '#aaaaaa',
-            '--orange-dim':   'rgba(170,170,170,0.1)',
-            '--orange-glow':  'rgba(170,170,170,0.2)',
-            '--red':          '#ff4560',
-            '--gold':         '#ffffff',
-        },
         canvas: {
             bg:          '#000000',
             vignette:    false,
@@ -81,26 +46,9 @@ export const THEMES = {
 
     synthwave: {
         id: 'synthwave',
+        swatch: ['#e040fb', '#00e5ff'],   // [player, AI] colours for theme pickers
+        preview: '#0e0718',
         name: 'Synthwave',
-        css: {
-            '--bg':           '#0e0718',
-            '--bg2':          '#130a22',
-            '--surface':      'rgba(180,100,255,0.05)',
-            '--surface-hover':'rgba(180,100,255,0.09)',
-            '--border':       'rgba(180,100,255,0.1)',
-            '--border-mid':   'rgba(180,100,255,0.18)',
-            '--text':         '#f0e0ff',
-            '--text-2':       '#9977bb',
-            '--text-3':       '#553366',
-            '--cyan':         '#e040fb',
-            '--cyan-dim':     'rgba(224,64,251,0.12)',
-            '--cyan-glow':    'rgba(224,64,251,0.28)',
-            '--orange':       '#00e5ff',
-            '--orange-dim':   'rgba(0,229,255,0.12)',
-            '--orange-glow':  'rgba(0,229,255,0.28)',
-            '--red':          '#ff4560',
-            '--gold':         '#ffec40',
-        },
         canvas: {
             bg:          '#0e0718',
             vignette:    true,
@@ -124,26 +72,9 @@ export const THEMES = {
 
     arctic: {
         id: 'arctic',
+        swatch: ['#0088cc', '#e05500'],   // [player, AI] colours for theme pickers
+        preview: '#f0f4f8',
         name: 'Arctic',
-        css: {
-            '--bg':           '#f0f4f8',
-            '--bg2':          '#e4ecf4',
-            '--surface':      'rgba(0,0,0,0.04)',
-            '--surface-hover':'rgba(0,0,0,0.07)',
-            '--border':       'rgba(0,0,0,0.08)',
-            '--border-mid':   'rgba(0,0,0,0.14)',
-            '--text':         '#1a2535',
-            '--text-2':       '#5a7090',
-            '--text-3':       '#9ab0c8',
-            '--cyan':         '#0088cc',
-            '--cyan-dim':     'rgba(0,136,204,0.1)',
-            '--cyan-glow':    'rgba(0,136,204,0.2)',
-            '--orange':       '#e05500',
-            '--orange-dim':   'rgba(224,85,0,0.1)',
-            '--orange-glow':  'rgba(224,85,0,0.2)',
-            '--red':          '#cc2244',
-            '--gold':         '#cc7700',
-        },
         canvas: {
             bg:          '#f8fbff',
             bgGrad:      true,
@@ -166,14 +97,21 @@ export const THEMES = {
 
 export const THEME_ORDER = ['neon', 'retro', 'synthwave', 'arctic'];
 
-// Apply a theme's CSS variables to :root
+// Switch the UI palette (styles.css keys every colour off [data-game-theme])
 export function applyThemeCSS(themeId) {
-    const theme = THEMES[themeId];
-    if (!theme) return;
-    const root = document.documentElement;
-    for (const [key, val] of Object.entries(theme.css)) {
-        root.style.setProperty(key, val);
-    }
-    // Mark body with theme class for any per-theme overrides
-    document.body.dataset.theme = themeId;
+    if (!THEMES[themeId]) return;
+    document.documentElement.dataset.gameTheme = themeId;
+}
+
+// Theme saved in localStorage, or Neon.
+export function getSavedTheme() {
+    try {
+        const t = localStorage.getItem('pongai-theme');
+        if (THEMES[t]) return t;
+    } catch {}
+    return 'neon';
+}
+
+export function saveTheme(themeId) {
+    try { localStorage.setItem('pongai-theme', themeId); } catch {}
 }

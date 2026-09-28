@@ -87,7 +87,7 @@ export function handlePointScored(side, state) {
     const won = checkGameWin(s.points, target);
     if (won) {
         s.gamesWon[won] += 1;
-        s.gameWinOrder = [...(s.gameWinOrder ?? []), won]; // record in order
+        s.gameWinOrder = [...(s.gameWinOrder ?? []), won];
         const gamesNeeded = MATCH_FORMATS[s.matchFormat]?.gamesNeeded ?? 2;
         if (s.gamesWon[won] >= gamesNeeded) {
             s.matchEnded = true;
@@ -96,7 +96,7 @@ export function handlePointScored(side, state) {
         return { state: s, result: `gameWon:${won}` };
     }
 
-    // Update game-point / match-point counters
+    // Only update counters when no one has won yet
     s = updatePointStateCounters(s, target);
 
     return { state: s, result: 'point' };
