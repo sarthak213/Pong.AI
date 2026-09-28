@@ -373,11 +373,16 @@ body.in-match .theme-switcher { display: none !important; }
 /* Side column starts level with the setup card and ends level with it */
 @media (min-width: 1024px) {
     .menu-grid { grid-template-columns: 1.15fr 1fr; grid-template-areas: "hero ." "setup side"; }
+    /* height:0 + min-height:100%: the side column adds no height of its own, so the row
+       is exactly as tall as the setup card (no padding added to it) and the side fills it. */
+    .menu-side { height: 0; min-height: 100%; }
+    /* The decorative preview absorbs whatever height is left after Top scores */
+    .menu-side .court-preview { flex: 1; min-height: 0; aspect-ratio: auto; }
+    .top-scores { display: flex; flex-direction: column; }
 }
 .menu-hero  { grid-area: hero; }
 .menu-setup { grid-area: setup; }
 .menu-side  { grid-area: side; }
-.top-scores { flex: 1; display: flex; flex-direction: column; }
 .top-scores .panel-foot { margin-top: auto; padding-top: 12px; }
 .stack { display: flex; flex-direction: column; gap: 24px; }
 
@@ -482,9 +487,8 @@ body.in-match .theme-switcher { display: none !important; }
 /* Attract-mode court preview (CSS keyframes, 4.8 s loop) */
 .court-preview { position: relative; aspect-ratio: 3 / 2; overflow: hidden; }
 .court-preview svg { width: 100%; height: 100%; display: block; }
-.cp-net { stroke: hsl(var(--foreground)); stroke-opacity: 0.12; }
-.cp-player { fill: hsl(var(--primary)); animation: cpPlayer 4.8s linear infinite; }
-.cp-ai     { fill: hsl(var(--ai));      animation: cpAi 4.8s linear infinite; }
+.cp-player { animation: cpPlayer 4.8s linear infinite; }
+.cp-ai     { animation: cpAi 4.8s linear infinite; }
 .cp-ball   { animation: cpBall 4.8s linear infinite; }
 @keyframes cpPlayer { 0% { transform: translateY(42px); } 25% { transform: translateY(82px); } 50% { transform: translateY(22px); } 75% { transform: translateY(32px); } 100% { transform: translateY(42px); } }
 @keyframes cpAi     { 0% { transform: translateY(82px); } 25% { transform: translateY(132px); } 50% { transform: translateY(112px); } 75% { transform: translateY(102px); } 100% { transform: translateY(82px); } }
@@ -516,12 +520,6 @@ body.in-match .theme-switcher { display: none !important; }
     letter-spacing: 0.1em;
     text-transform: uppercase;
 }
-
-.control-cards { display: grid; gap: 8px; grid-template-columns: 1fr; }
-@media (min-width: 640px) { .control-cards { grid-template-columns: repeat(3, 1fr); } }
-.control-card { display: flex; align-items: flex-start; gap: 12px; padding: 12px; }
-.control-card strong { display: block; font-size: 14px; }
-.control-card span { font-size: 12px; color: hsl(var(--muted-foreground)); }
 
 .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
 .panel-title { display: flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 700; }
@@ -648,7 +646,6 @@ body.in-match .theme-switcher { display: none !important; }
 @keyframes pulse { 50% { opacity: 0.4; } }
 
 .side { display: flex; flex-direction: column; gap: 12px; }
-.side-tip { margin-top: auto; }   /* bottom edge lines up with the court */
 .pu-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-size: 12px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: hsl(var(--muted-foreground)); }
 .pu-pips { display: flex; gap: 4px; }
 .pu-pips span { width: 8px; height: 8px; border-radius: 50%; background: hsl(var(--foreground) / 0.15); }
@@ -678,9 +675,28 @@ body.in-match .theme-switcher { display: none !important; }
 
 .side-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 @media (min-width: 1024px) { .side-actions { grid-template-columns: 1fr; } }
-.side-tip { display: none; padding: 12px; border-radius: 6px; background: hsl(var(--secondary) / 0.6); font-size: 11px; line-height: 1.6; color: hsl(var(--muted-foreground)); }
-.side-tip kbd { color: hsl(var(--foreground)); }
-@media (min-width: 1024px) { .side-tip { display: block; } }
+.side-tip {
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px 14px;
+    border-radius: 6px;
+    background: hsl(var(--secondary) / 0.6);
+    font-size: 14px;
+    overflow: hidden;
+    color: hsl(var(--muted-foreground));
+}
+.side-tip-title { font-size: 12px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
+.side-tip-row { display: flex; align-items: center; gap: 10px; }
+.side-tip-row span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.side-tip kbd { flex-shrink: 0; min-width: 48px; text-align: center; font-size: 12px; padding: 2px 6px; color: hsl(var(--foreground)); }
+/* The court alone sets the row height (side adds none of its own); the Controls
+   card grows into the space below the buttons so its bottom meets the court's. */
+@media (min-width: 1024px) {
+    .side { height: 0; min-height: 100%; }
+    .side-tip { display: flex; flex: 1; min-height: 0; }
+}
 
 /* Pause/Resume button swaps icon + label via .is-paused */
 #pauseBtn .when-paused { display: none; }

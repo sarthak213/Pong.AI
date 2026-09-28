@@ -110,15 +110,15 @@ The formula lives in `compute_score()` in `supabase/schema.sql` (authoritative) 
 - **Theme** tiles with a mini court preview.
 - **Match format**: One-shot, Best of 3, Best of 5, Best of 7.
 - **Trajectory visualizer** toggle.
-- An animated court preview, a controls summary, and the top 5 scores for the selected difficulty.
+- An animated court preview drawn in the selected theme's canvas colours, and the top 3 scores for the selected difficulty. The right column is sized to the setup card, so both columns end together.
 
 Name, difficulty, format and trajectory are remembered in `localStorage` (`pongai-settings`).
 
 ### Game
 
-- **Scoreboard**: player and AI score (pops on every point), games-won pips, and a tag for *Advantage*, *Game point* or *Match point*. With more than one, it shows the count, e.g. *4 game points*. The centre shows *first to 7* or a *Deuce #n* pill, plus format · difficulty · game number.
+- **Scoreboard**: player and AI score (pops on every point; shows **ADV** on advantage, as in tennis), games-won pips, and a *Game point* / *Match point* tag under the name. With more than one, it shows the count, e.g. *4 game points*. The centre shows *first to 7*, format · difficulty · game number, and a *Deuce #n* pill on the same row as the tags. Names sit in a fixed-width column, so tags never move the scores.
 - **Point flashes**: a large animated banner over the court after every point: `+1` / `AI +1`, `DEUCE`, `GAME · NAME`, and `VICTORY` / `DEFEAT`.
-- **Side panel**: powerup buttons with remaining pips, trajectory toggle, Pause/Resume, Restart and Quit.
+- **Side panel**: powerup buttons with remaining pips, trajectory toggle, Pause/Resume, Restart and Quit, and a Controls card that fills down to the court's bottom edge.
 
 ### Game over
 

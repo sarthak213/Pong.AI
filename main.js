@@ -6,6 +6,7 @@ import { DIFFICULTY } from './difficulty.js';
 import { createPowerupState, tryActivatePowerup, getPowerupEffects, resetPowerupAfterPoint, resetPowerupForGame } from './powerups.js';
 import { createScoreState, resetScoreForNewGame, resetScoreForNewMatch, handlePointScored, getPointStatus, getAdvantage, isDeuce, WIN_SCORE, MATCH_FORMATS } from './scoring.js';
 import { draw, setRendererTheme } from './renderer.js';
+import { THEMES } from './themes.js';
 import { submitResult, isLeaderboardConfigured, computeScore, formatDuration, DIFFICULTY_INFO } from './leaderboard.js';
 import { initPage, getTheme, onThemeChange, refreshIcons, mountResults, icon, esc } from './ui.js';
 
@@ -352,8 +353,9 @@ function refreshUI() {
     const ptStatus = getPointStatus(score);
 
     for (const who of ['player', 'ai']) {
-        // Points — capped at WIN_SCORE so deuce wins never show 8. Pops when it changes.
-        const pts = Math.min(score.points[who], WIN_SCORE);
+        // Points — ADV on advantage (tennis-style), otherwise capped at WIN_SCORE
+        // so deuce wins never show 8. Pops when it changes.
+        const pts = adv === who ? 'ADV' : Math.min(score.points[who], WIN_SCORE);
         const ptsEl = $(`${who}Score`);
         if (shownPoints[who] !== pts) {
             ptsEl.textContent = pts;
@@ -368,10 +370,9 @@ function refreshUI() {
         pips.innerHTML = Array.from({ length: fmt.gamesNeeded }, (_, i) =>
             `<span class="${i < score.gamesWon[who] ? 'on' : ''}"></span>`).join('');
 
-        // Advantage / game point / match point tag
+        // Game point / match point tag (advantage is always one of these)
         let status = null;
-        if (adv === who) status = 'Advantage';
-        else if (!deuce && !score.matchEnded && ptStatus[who]) {
+        if (!deuce && !score.matchEnded && ptStatus[who]) {
             const { type, count } = ptStatus[who];
             status = type === 'matchPoint'
                 ? (count === 1 ? 'Match point' : `${count} match points`)
@@ -733,14 +734,33 @@ function renderMenu() {
     syncMenu();
 }
 
+// ─── Menu court preview (matches the active theme's canvas look) ─────────────────
+// Lifts an rgba() colour's alpha so faint canvas lines stay visible at preview size.
+const boostAlpha = (rgba, mult) => rgba.replace(/([\d.]+)\)$/, (_, a) => `${Math.min(1, parseFloat(a) * mult)})`);
+
+function renderCourtPreview(themeId) {
+    const c = THEMES[themeId].canvas;
+    const set = (id, attrs) => { const el = $(id); for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v); };
+    $('courtPreview').style.background = c.bgGrad ? `linear-gradient(${c.bgGradTop}, ${c.bgGradBot})` : c.bg;
+    set('cpNet', { stroke: boostAlpha(c.netColor, 3) });
+    const rx = c.paddleStyle === 'retro' ? 0 : 2;
+    set('cpPlayer', { fill: c.playerColor, rx });
+    set('cpAi',     { fill: c.aiColor, rx });
+    // Glowing themes shade the ball as a sphere; flat themes use the plain ball colour.
+    set('cpBall',     { fill: c.ballGlow ? 'url(#cp-ball-shade)' : c.ballColor });
+    set('cpBallGlow', { fill: c.ballGlowColor ?? 'rgba(230,240,255,0.5)', display: c.ballGlow ? 'inline' : 'none' });
+    set('cpGrid', c.grid ? { display: 'inline', stroke: boostAlpha(c.gridColor, 6) } : { display: 'none' });
+}
+
 // ─── Init ──────────────────────────────────────────────────────────────────────
 (function init() {
     renderMenu();
     initPage();
     setRendererTheme(getTheme());
-    onThemeChange(setRendererTheme);
+    renderCourtPreview(getTheme());
+    onThemeChange(id => { setRendererTheme(id); renderCourtPreview(id); });
 
-    reloadMenuTop = mountResults($('menuTop'), () => ({ view: 'top', difficulty: settings.difficulty, limit: 5, compact: true }));
+    reloadMenuTop = mountResults($('menuTop'), () => ({ view: 'top', difficulty: settings.difficulty, limit: 3, compact: true }));
     reloadOverTop = mountResults($('overTop'), () => ({ view: 'top', difficulty: settings.difficulty, limit: 10, highlightId: savedResultId }), { immediate: false });
 
     new ResizeObserver(() => doResizeCanvas()).observe(canvas.parentElement);
