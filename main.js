@@ -383,8 +383,7 @@ function refreshUI() {
         }
     }
 
-    // Centre: deuce pill or "first to 7", then format · difficulty · game n
-    $('hudFirst').hidden = deuce;
+    // Centre: "first to 7", format · difficulty · game n, and the deuce pill on the status row
     $('hudDeuce').hidden = !deuce;
     $('hudDeuceText').textContent = score.deuceCount > 1 ? `Deuce #${score.deuceCount}` : 'Deuce';
     const gameNo = score.gamesWon.player + score.gamesWon.ai + 1;

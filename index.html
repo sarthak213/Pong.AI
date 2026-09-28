@@ -36,8 +36,7 @@
 <!-- ═══ Menu ═══════════════════════════════════════════════════ -->
 <main id="screenMenu" class="container">
     <div class="menu-grid">
-        <div class="stack">
-            <div class="fade-up" style="--i:0">
+            <div class="menu-hero fade-up" style="--i:0">
                 <p class="hero-pill"><i data-lucide="swords"></i> You vs. the AI</p>
                 <h1 class="hero-title">
                     Beat the <span class="glow-text-primary">machine</span><br>
@@ -49,7 +48,7 @@
                 </p>
             </div>
 
-            <section class="card pad-lg shadow-soft fade-up" style="--i:1" aria-label="Match setup">
+            <section class="menu-setup card pad-lg shadow-soft fade-up" style="--i:1" aria-label="Match setup">
                 <div class="field">
                     <div class="section-label"><i data-lucide="user"></i> Player name</div>
                     <input id="playerName" class="text-input" maxlength="14" placeholder="Your name"
@@ -94,9 +93,8 @@
                 <button id="startBtn" class="btn btn-primary btn-lg shadow-lift"><i data-lucide="play"></i> Start match</button>
                 <p id="startError" class="start-error" hidden>Enter a name to start.</p>
             </section>
-        </div>
 
-        <div class="stack">
+        <div class="menu-side stack">
             <div class="card court-preview shadow-lift fade-up" style="--i:2">
                 <svg viewBox="0 0 300 200" role="img" aria-label="Animated Pong rally preview">
                     <defs>
@@ -130,7 +128,7 @@
                 </div>
             </section>
 
-            <section class="card pad shadow-soft fade-up" style="--i:4" aria-label="Top scores">
+            <section class="top-scores card pad shadow-soft fade-up" style="--i:4" aria-label="Top scores">
                 <div class="panel-head">
                     <h2 class="panel-title"><i data-lucide="trophy" class="text-gold"></i> Top scores · <span class="muted" id="menuTopDiff"></span></h2>
                     <a class="btn btn-secondary btn-sm" href="leaderboard.html">View all <i data-lucide="arrow-right"></i></a>
@@ -156,9 +154,9 @@
         </div>
 
         <div class="hud-centre">
-            <span id="hudFirst" class="hud-first">first to 7</span>
-            <span id="hudDeuce" class="deuce-pill" hidden><i data-lucide="flame"></i><span id="hudDeuceText">Deuce</span></span>
+            <span class="hud-first">first to 7</span>
             <span class="hud-meta" id="hudMeta"></span>
+            <span class="hud-slot"><span id="hudDeuce" class="deuce-pill" hidden><i data-lucide="flame"></i><span id="hudDeuceText">Deuce</span></span></span>
         </div>
 
         <div class="score-block ai">
