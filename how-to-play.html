@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en" data-game-theme="neon">
+<head>
+    <meta charset="UTF-8">
+    <title>How to Play · Pong.AI</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Controls, tennis-style deuce scoring, powerups and difficulty levels in Pong.AI.">
+    <script>try{var t=localStorage.getItem('pongai-theme');if(['neon','retro','synthwave','arctic'].indexOf(t)>=0)document.documentElement.dataset.gameTheme=t;}catch(e){}</script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="icon" href="favicon.ico" sizes="48x48">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <meta name="theme-color" content="#090c10">
+    <link rel="stylesheet" href="styles.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+</head>
+<body>
+
+<header class="site-header">
+    <div class="site-header-inner">
+        <a class="brand" href="index.html" aria-label="Pong.AI home">
+            <span class="brand-ping"></span>
+            <span>Pong<span class="dot">.</span>AI</span>
+        </a>
+        <nav class="site-nav" aria-label="Main">
+            <a href="index.html"><i data-lucide="gamepad-2"></i><span class="nav-label">Play</span></a>
+            <a href="leaderboard.html"><i data-lucide="trophy"></i><span class="nav-label">Leaderboard</span></a>
+            <a href="how-to-play.html" aria-current="page"><i data-lucide="book-open"></i><span class="nav-label">How to Play</span></a>
+        </nav>
+        <div class="header-themes theme-switcher" role="radiogroup" aria-label="Theme" data-theme-picker="swatch"></div>
+    </div>
+</header>
+
+<main class="container" style="max-width:1000px">
+    <div class="fade-up" style="--i:0; margin-bottom:32px">
+        <a class="btn btn-secondary btn-sm back-link" href="index.html"><i data-lucide="arrow-left"></i> Back to game</a>
+        <h1 class="page-title">How to&nbsp;<span class="glow-text-primary">play</span></h1>
+        <p class="page-lede">It's classic Pong against a clever AI, with <strong class="text-gold">deuce</strong> rules borrowed from tennis.</p>
+    </div>
+
+    <div class="htp-grid">
+        <section class="card htp-card shadow-soft fade-up" style="--i:1">
+            <h2><span class="chip tone-primary"><i data-lucide="mouse-pointer-2"></i></span> Controls</h2>
+            <table class="mini-table">
+                <tr><td>Move paddle</td><td>Mouse or trackpad over the court; drag on touch screens</td></tr>
+                <tr><td>Serve</td><td>Click the court or <kbd>Space</kbd></td></tr>
+                <tr><td>Pause / resume</td><td><kbd>Space</kbd> or the Pause button</td></tr>
+                <tr><td>Powerups</td><td><kbd>W</kbd> Speed · <kbd>D</kbd> Size, or click them</td></tr>
+                <tr><td>Restart / Quit</td><td>Buttons beside the court</td></tr>
+            </table>
+        </section>
+
+        <section class="card htp-card shadow-soft fade-up" style="--i:2">
+            <h2><span class="chip tone-gold"><i data-lucide="flame"></i></span> Tennis-style deuce</h2>
+            <p>First to <strong>7 points</strong> wins a game. At <strong>6–6</strong> it's deuce: win a point to take the
+                Advantage, then win the next one to take the game. Lose the point on advantage and it's back to deuce,
+                as many times as it takes. The scoreboard shows how many game or match points you hold.</p>
+        </section>
+
+        <section class="card htp-card shadow-soft fade-up" style="--i:3">
+            <h2><span class="chip tone-ai"><i data-lucide="trophy"></i></span> Match formats</h2>
+            <table class="mini-table">
+                <tr><td>One-shot</td><td>A single game</td></tr>
+                <tr><td>Best of 3</td><td>First to 2 games</td></tr>
+                <tr><td>Best of 5</td><td>First to 3 games</td></tr>
+                <tr><td>Best of 7</td><td>First to 4 games</td></tr>
+            </table>
+        </section>
+
+        <section class="card htp-card shadow-soft fade-up" style="--i:4">
+            <h2><span class="chip tone-gold"><i data-lucide="zap"></i></span> Powerups</h2>
+            <p>You get <strong>two per game</strong> and can use one per point, while the ball is in play. Effects last until the point ends.</p>
+            <ul>
+                <li><kbd>W</kbd> Speed: your paddle reacts 4× faster and the AI slows to 60%.</li>
+                <li><kbd>D</kbd> Size: your paddle grows to 160%.</li>
+            </ul>
+            <p>Powerups are disabled in Extreme.</p>
+        </section>
+
+        <section class="card htp-card shadow-soft fade-up" style="--i:5">
+            <h2><span class="chip tone-primary"><i data-lucide="gauge"></i></span> Difficulty</h2>
+            <table class="mini-table">
+                <tr><td>Easy</td><td>Mostly chases the ball, gentle angles, tires quickly.</td></tr>
+                <tr><td>Medium</td><td>Reads part of the ball's path and goes for moderate angles.</td></tr>
+                <tr><td>Hard</td><td>Highly predictive, hunts corners and sets up awkward returns.</td></tr>
+                <tr><td>Extreme</td><td>Fastest ball and a relentless AI. No powerups.</td></tr>
+            </table>
+            <p style="margin-top:6px">At every level the AI tires as a rally gets longer, so keep the pressure on.</p>
+        </section>
+
+        <section class="card htp-card shadow-soft fade-up" style="--i:6">
+            <h2><span class="chip tone-ai"><i data-lucide="route"></i></span> Trajectory visualizer</h2>
+            <p>Toggle the dashed guide to see where the ball will reach the AI side, including wall bounces. It uses the
+                same prediction the AI does, which makes it great for learning angles.</p>
+        </section>
+
+        <section class="card htp-card shadow-soft fade-up" style="--i:7">
+            <h2><span class="chip tone-gold"><i data-lucide="list-ordered"></i></span> Leaderboard</h2>
+            <p>Every finished match is saved to the <a class="accent-link" href="leaderboard.html">leaderboard</a>.</p>
+            <p id="formulaText"></p>
+        </section>
+
+        <section class="card htp-card shadow-soft fade-up" style="--i:8">
+            <h2><span class="chip tone-primary"><i data-lucide="palette"></i></span> Themes</h2>
+            <p>Choose Neon, Retro, Synthwave or Arctic before a match, from the menu or the header. The theme locks and
+                the pickers hide once the match starts; they come back when it ends.</p>
+        </section>
+
+        <section class="card htp-card shadow-soft fade-up" style="--i:9">
+            <h2><span class="chip tone-ai"><i data-lucide="keyboard"></i></span> Hitting angles</h2>
+            <p>Where the ball meets your paddle sets its return angle: hit near the edges for steep shots. The ball
+                also speeds up the longer a game goes on.</p>
+        </section>
+    </div>
+
+    <div class="cta fade-up" style="--i:10">
+        <div style="display:flex; gap:8px"><i data-lucide="maximize-2" class="text-ai"></i><i data-lucide="zap" class="text-gold"></i></div>
+        <p>Ready to take on the machine?</p>
+        <a class="btn btn-primary shadow-lift" href="index.html"><i data-lucide="play"></i> Play now</a>
+    </div>
+</main>
+
+<script type="module">
+    import { initPage } from './ui.js';
+    import { SCORE_FORMULA_TEXT } from './leaderboard.js';
+    document.getElementById('formulaText').textContent = SCORE_FORMULA_TEXT;
+    initPage();
+</script>
+</body>
+</html>

@@ -1,23 +1,39 @@
-// main.js — game orchestrator
+// main.js — orchestrator: screens (menu → game → game over), game loop, input, UI state
 
 import { createBall, clamp, sweptPaddleCollision, collidesWithPaddle, handlePaddleBounce, moveBall, bounceWalls, applySpeedRamp } from './physics.js';
 import { moveAI } from './ai.js';
-import { DIFFICULTY, getDifficultyLabel } from './difficulty.js';
+import { DIFFICULTY } from './difficulty.js';
 import { createPowerupState, tryActivatePowerup, getPowerupEffects, resetPowerupAfterPoint, resetPowerupForGame } from './powerups.js';
 import { createScoreState, resetScoreForNewGame, resetScoreForNewMatch, handlePointScored, getPointStatus, getAdvantage, isDeuce, WIN_SCORE, MATCH_FORMATS } from './scoring.js';
 import { draw, setRendererTheme } from './renderer.js';
-import { THEMES, THEME_ORDER, applyThemeCSS } from './themes.js';
+import { THEMES } from './themes.js';
+import { submitResult, isLeaderboardConfigured, computeScore, formatDuration, DIFFICULTY_INFO } from './leaderboard.js';
+import { initPage, getTheme, onThemeChange, refreshIcons, mountResults, icon, esc } from './ui.js';
 
-// ─── Overlay helpers ───────────────────────────────────────────────────────────
-function showOverlay(text) {
-    const el  = document.getElementById('overlay');
-    const msg = document.getElementById('message');
-    if (msg) msg.textContent = text;
-    if (el)  el.style.display = 'flex';
+// ─── Settings (persisted) ──────────────────────────────────────────────────────
+const SETTINGS_KEY = 'pongai-settings';
+const DIFF_OPTIONS = [
+    { id: 'easy',    cfg: 1,         level: 1, bars: 1, blurb: 'Mostly chases the ball and plays gentle angles. Tires quickly in long rallies.' },
+    { id: 'medium',  cfg: 2,         level: 2, bars: 2, blurb: 'Reads part of the ball’s path and goes for moderate angles.' },
+    { id: 'hard',    cfg: 3,         level: 3, bars: 3, blurb: 'Highly predictive: hunts corners and sets up awkward returns.' },
+    { id: 'extreme', cfg: 'extreme', level: 3, bars: 4, blurb: 'Fastest ball and a relentless AI that aims for steep angles. Powerups are disabled.' },
+];
+
+function loadSettings() {
+    const s = { playerName: 'Player', difficulty: 'medium', matchFormat: 'best3', showTrajectory: true };
+    try {
+        const p = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? '{}');
+        if (typeof p.playerName === 'string' && p.playerName.trim()) s.playerName = p.playerName.slice(0, 14);
+        if (DIFFICULTY_INFO[p.difficulty]) s.difficulty = p.difficulty;
+        if (MATCH_FORMATS[p.matchFormat])  s.matchFormat = p.matchFormat;
+        if (typeof p.showTrajectory === 'boolean') s.showTrajectory = p.showTrajectory;
+    } catch {}
+    return s;
 }
-function hideOverlay() {
-    const el = document.getElementById('overlay');
-    if (el)  el.style.display = 'none';
+let settings = loadSettings();
+function updateSettings(patch) {
+    settings = { ...settings, ...patch };
+    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch {}
 }
 
 // ─── Canvas & context ──────────────────────────────────────────────────────────
@@ -44,6 +60,7 @@ const getDisplaySize = () => {
 };
 
 // ─── Game state ────────────────────────────────────────────────────────────────
+let screen  = 'menu';   // 'menu' | 'game' | 'over'
 let score   = createScoreState();
 let powerup = createPowerupState();
 
@@ -52,44 +69,43 @@ let playerY = 0, aiY = 0;
 let PADDLE_HEIGHT_current = PADDLE_HEIGHT;
 let playerSpeedMult = 1, aiSpeedMult = 1;
 
-let running        = false;
-let isPaused       = false;
-let extremeMode    = false;
-let showTrajectory = true;
+let running     = false;
+let isPaused    = false;
+let extremeMode = false;
+let aiLevel     = 2;     // 1..3 — ignored by the AI when extremeMode is on
 
 // Rally hit counter — increments each paddle hit, resets each point.
 // Used by the AI fatigue system.
 let rallyHits = 0;
+
+// Whole-match stats for the game-over screen and leaderboard.
+let matchStats = createMatchStats();
+function createMatchStats() {
+    return { points: { player: 0, ai: 0 }, longestRally: 0, deuces: 0, playMs: 0 };
+}
+
+// Bumped on every new match so late async work (save, game-over delay) from an old match is ignored.
+let matchToken = 0;
 
 // Elapsed active play time for speed ramp — reset each game.
 let startTimestamp      = null;
 let accumulatedPlayTime = 0;
 let lastTime            = null;
 
-let settings = { aiDifficulty: 3 };
-
 // ─── DOM refs ──────────────────────────────────────────────────────────────────
-const playerNameInput = document.getElementById('playerName');
-const pauseBtn        = document.getElementById('pauseBtn');
-const restartBtn      = document.getElementById('restartBtn');
-const aiDiffInput     = document.getElementById('aiDifficulty');
-const aiDiffLabel     = document.getElementById('aiDiffLabel');
-const extremeToggle   = document.getElementById('extremeMode');
-const trajToggle      = document.getElementById('trajToggle');
-const matchFormatBtns = document.querySelectorAll('.fmt-btn');
-const themeBtns       = document.querySelectorAll('.theme-btn');
+const $ = (id) => document.getElementById(id);
+const screens = { menu: $('screenMenu'), game: $('screenGame'), over: $('screenOver') };
+const overlayEl = $('overlay');
+const pauseBtn  = $('pauseBtn');
+const powerupBtns = document.querySelectorAll('[data-powerup]');
 
-// ─── Theme state ───────────────────────────────────────────────────────────────
-let currentTheme = 'neon';
-
-function applyTheme(themeId) {
-    if (!THEMES[themeId]) return;
-    currentTheme = themeId;
-    applyThemeCSS(themeId);
-    setRendererTheme(themeId);
-    themeBtns.forEach(b => b.classList.toggle('active', b.dataset.theme === themeId));
-    // Persist to localStorage so it survives page reloads
-    try { localStorage.setItem('pongai-theme', themeId); } catch {}
+// ─── Screens ───────────────────────────────────────────────────────────────────
+function showScreen(name) {
+    screen = name;
+    for (const [key, el] of Object.entries(screens)) el.hidden = key !== name;
+    // Theme pickers are hidden (and so unusable) for the whole match.
+    document.body.classList.toggle('in-match', name === 'game');
+    window.scrollTo({ top: 0 });
 }
 
 // ─── Canvas sizing ─────────────────────────────────────────────────────────────
@@ -100,6 +116,7 @@ function doResizeCanvas() {
 
     const availW = panel.clientWidth;
     const availH = panel.clientHeight;
+    if (!availW || !availH) return;   // court hidden (menu / game-over screen)
     const ratio  = BASE_W / BASE_H;
 
     let cssW = availW;
@@ -139,7 +156,7 @@ function doResizeCanvas() {
         PLAYER_X      = Math.max(6,  Math.round(BASE_PLAYER_X  * sf));
         AI_MARGIN     = Math.max(6,  Math.round(BASE_AI_MARGIN * sf));
 
-        // FIX #3: reapply active powerup scale after resize instead of blindly resetting.
+        // Reapply active powerup scale after resize instead of blindly resetting.
         PADDLE_HEIGHT_current = powerup.active === 'size'
             ? Math.min(PADDLE_HEIGHT * 1.6, getDisplaySize().displayH - 10)
             : PADDLE_HEIGHT;
@@ -150,7 +167,7 @@ function doResizeCanvas() {
     }
 }
 
-function getPlayerName() { return playerNameInput?.value?.trim() || 'Player'; }
+function getPlayerName() { return settings.playerName.trim() || 'Player'; }
 
 function resetPositions() {
     const { displayH } = getDisplaySize();
@@ -160,15 +177,40 @@ function resetPositions() {
 
 function newBall(servingTo) {
     const { displayW, displayH } = getDisplaySize();
-    const diff = extremeMode ? 'extreme' : settings.aiDifficulty;
+    const diff = extremeMode ? 'extreme' : aiLevel;
     return createBall(displayW, displayH, gameplayScale, diff, servingTo);
 }
 
-// ─── Speed ramp ────────────────────────────────────────────────────────────────
+// ─── Court overlay + flash ─────────────────────────────────────────────────────
+function showOverlay(text, { crown = false } = {}) {
+    $('message').textContent = text;
+    $('ovPlay').hidden  = crown;
+    $('ovCrown').hidden = !crown;
+    overlayEl.hidden = false;
+}
+function hideOverlay() { overlayEl.hidden = true; }
+
+// Big animated text over the court. tone: 'player' | 'ai' | 'gold'
+function showFlash(text, tone) {
+    const el   = $('flash');
+    const span = el.firstElementChild;
+    span.textContent = text;
+    span.className = tone === 'player' ? 'glow-text-primary' : tone === 'ai' ? 'glow-text-ai' : 'text-gold';
+    el.classList.remove('show');
+    void el.offsetWidth;   // restart the CSS animation
+    el.classList.add('show');
+}
+
 // ─── Scoring / game flow ───────────────────────────────────────────────────────
 function onPointScored(side) {
     const { state: newScore, result } = handlePointScored(side, score);
     score = newScore;
+
+    matchStats.points[side] += 1;
+    matchStats.longestRally = Math.max(matchStats.longestRally, rallyHits);
+    if (result?.startsWith('gameWon:') || result?.startsWith('matchWon:')) {
+        matchStats.deuces += newScore.deuceCount;
+    }
 
     powerup = resetPowerupAfterPoint(powerup, extremeMode);
     playerSpeedMult = 1;
@@ -176,12 +218,13 @@ function onPointScored(side) {
     PADDLE_HEIGHT_current = PADDLE_HEIGHT;
     rallyHits = 0; // reset fatigue counter each point
     running = false;
-    refreshUI();
 
     if (result === 'deuce') {
-        // FIX #13: serve toward the scorer (who just evened it up), not away.
+        showFlash('DEUCE', 'gold');
+        refreshUI();
+        // Serve toward the scorer (who just evened it up), not away.
         ball = newBall(side);
-        showOverlay(`Deuce! — click or Space to serve`);
+        showOverlay('Deuce! Click or press Space to serve');
         return;
     }
 
@@ -189,21 +232,24 @@ function onPointScored(side) {
         const winner = result.split(':')[1];
         const name   = winner === 'player' ? getPlayerName() : 'AI';
         const other  = winner === 'player' ? 'ai' : 'player';
+        showFlash(winner === 'player' ? 'VICTORY' : 'DEFEAT', winner);
         ball = newBall(side === 'player' ? 'ai' : 'player');
         resetPositions();
         score.matchEnded = true;
-        unlockInputs();
-        showOverlay(`${name} wins the match ${score.gamesWon[winner]}–${score.gamesWon[other]}! Click Restart to play again.`);
+        refreshUI();
+        showOverlay(`${name} wins the match ${score.gamesWon[winner]}–${score.gamesWon[other]}!`, { crown: true });
+        finishMatch(winner);
         return;
     }
 
     if (result?.startsWith('gameWon:')) {
         const winner = result.split(':')[1];
         const name   = winner === 'player' ? getPlayerName() : 'AI';
-        // FIX #4: read gamesTotal from the returned state BEFORE resetting.
+        showFlash(`GAME · ${name.toUpperCase()}`, winner);
+        // Read gamesTotal from the returned state BEFORE resetting.
         const gamesTotal = newScore.gamesWon.player + newScore.gamesWon.ai;
 
-        // FIX #9: reset ramp state between games in a match.
+        // Reset ramp state between games in a match.
         accumulatedPlayTime = 0;
         startTimestamp      = null;
 
@@ -212,60 +258,64 @@ function onPointScored(side) {
         ball    = newBall(winner === 'player' ? 'ai' : 'player');
         resetPositions();
         refreshUI();
-        showOverlay(`${name} wins game ${gamesTotal}! Click or Space to start next game.`);
+        showOverlay(`${name} wins game ${gamesTotal}! Click or press Space for the next game`);
         return;
     }
 
-    // Normal point
+    // Normal point (the one that makes it 6–6 is announced as deuce)
+    if (isDeuce(score)) showFlash('DEUCE', 'gold');
+    else showFlash(side === 'player' ? '+1' : 'AI +1', side);
+    refreshUI();
     ball = newBall(side === 'player' ? 'ai' : 'player');
-    showOverlay(`Point for ${side === 'player' ? getPlayerName() : 'AI'} — click or Space to serve`);
+    showOverlay(`Point for ${side === 'player' ? getPlayerName() : 'AI'}. Click or press Space to serve`);
 }
 
-// ─── Game start / pause / restart ─────────────────────────────────────────────
-function startGame() {
-    if (score.matchEnded) return;
-    settings.aiDifficulty = parseInt(aiDiffInput?.value ?? '3', 10);
-    extremeMode = !!(extremeToggle?.checked);
+// ─── Match start / serve / pause ───────────────────────────────────────────────
+function startMatch() {
+    matchToken++;
+    const opt   = DIFF_OPTIONS.find(d => d.id === settings.difficulty) ?? DIFF_OPTIONS[1];
+    extremeMode = opt.id === 'extreme';
+    aiLevel     = opt.level;
 
-    if (extremeMode) powerup = resetPowerupForGame(true);
-
-    // Only reset elapsed time if starting fresh (not resuming mid-match between games).
-    if (accumulatedPlayTime === 0) startTimestamp = null;
-
-    if (!ball) ball = newBall();
-    running  = true;
+    score   = resetScoreForNewMatch(settings.matchFormat);
+    powerup = resetPowerupForGame(extremeMode);
+    matchStats          = createMatchStats();
+    accumulatedPlayTime = 0;
+    startTimestamp      = null;
+    rallyHits           = 0;
+    running  = false;
     isPaused = false;
-    lockInputs();
+    playerSpeedMult = 1;
+    aiSpeedMult     = 1;
+
+    $('hudPlayerName').textContent = getPlayerName();
+    $('trajToggle').checked = settings.showTrajectory;
+    showScreen('game');
+    doResizeCanvas();
+    PADDLE_HEIGHT_current = PADDLE_HEIGHT;
+    ball = newBall();
+    resetPositions();
+    refreshUI();
+    showOverlay('Click or press Space to serve');
+}
+
+// Serve the next point.
+function serve() {
+    if (score.matchEnded || running || isPaused) return;
+    running = true;
     hideOverlay();
     refreshUI();
-}
-
-function lockInputs() {
-    if (playerNameInput) playerNameInput.disabled = true;
-    if (aiDiffInput)     aiDiffInput.disabled     = true;
-    if (extremeToggle)   extremeToggle.disabled   = true;
-    matchFormatBtns.forEach(b => b.disabled = true);
-    themeBtns.forEach(b => b.disabled = true);
-}
-
-function unlockInputs() {
-    if (playerNameInput) playerNameInput.disabled = false;
-    // Only re-enable difficulty slider if extreme mode isn't overriding it
-    if (aiDiffInput)     aiDiffInput.disabled     = extremeMode;
-    if (extremeToggle)   extremeToggle.disabled   = false;
-    matchFormatBtns.forEach(b => b.disabled = false);
-    themeBtns.forEach(b => b.disabled = false);
 }
 
 function doPause() {
     if (!running) return;
     isPaused = true; running = false;
-    if (pauseBtn) pauseBtn.classList.add('paused');
     if (startTimestamp) {
         accumulatedPlayTime += (performance.now() - startTimestamp) / 1000;
         startTimestamp = null;
     }
-    showOverlay('Paused — press Space or click Resume to continue');
+    showOverlay('Paused. Press Space or Resume to continue');
+    refreshUI();
 }
 
 function doResume() {
@@ -273,189 +323,228 @@ function doResume() {
     isPaused       = false;
     running        = true;
     startTimestamp = performance.now();
-    lastTime       = null;   // FIX: prevents a large dt spike on the first resumed frame
-    if (pauseBtn) pauseBtn.classList.remove('paused');
+    lastTime       = null;   // prevents a large dt spike on the first resumed frame
     hideOverlay();
-}
-
-function doRestart() {
-    score   = resetScoreForNewMatch(score.matchFormat);
-    powerup = resetPowerupForGame(extremeMode);
-    accumulatedPlayTime = 0;
-    startTimestamp      = null;
-    rallyHits           = 0;
-    running  = false;
-    isPaused = false;
-    PADDLE_HEIGHT_current = PADDLE_HEIGHT;
-    playerSpeedMult = 1;
-    aiSpeedMult     = 1;
-    ball = newBall();
-    resetPositions();
-    unlockInputs();
     refreshUI();
-    showOverlay('Click or press Space to start');
 }
 
-// ─── UI refresh ────────────────────────────────────────────────────────────────
+// Space / click on the court
+function primaryAction() {
+    if (screen !== 'game' || score.matchEnded) return;
+    if (isPaused) doResume();
+    else if (!running) serve();
+}
+
+function quitToMenu() {
+    matchToken++;
+    running = false;
+    isPaused = false;
+    showScreen('menu');
+    reloadMenuTop?.();
+}
+
+// ─── HUD refresh ───────────────────────────────────────────────────────────────
+const shownPoints = { player: null, ai: null };
+
 function refreshUI() {
-    const adv   = getAdvantage(score);
-    const deuce = isDeuce(score);
+    const fmt   = MATCH_FORMATS[score.matchFormat];
+    const deuce = isDeuce(score) && !score.matchEnded;
+    const adv   = score.matchEnded ? null : getAdvantage(score);
+    const ptStatus = getPointStatus(score);
 
-    // Scores
-    const playerScoreEl = document.getElementById('playerScore');
-    const aiScoreEl     = document.getElementById('aiScore');
-    if (playerScoreEl) playerScoreEl.textContent = (adv === 'player') ? 'ADV' : score.points.player;
-    if (aiScoreEl)     aiScoreEl.textContent     = (adv === 'ai')     ? 'ADV' : score.points.ai;
-
-    // ── Shared point status banner (game point / match point) ─────
-    const ptStatus  = getPointStatus(score);
-    const banner    = document.getElementById('pointStatusBanner');
-    const bannerWho = document.getElementById('pointStatusWho');
-    const bannerLbl = document.getElementById('pointStatusLabel');
-
-    // Find if either side has a status (prefer match point over game point)
-    let activeSide = null, activeSt = null;
     for (const who of ['player', 'ai']) {
-        if (ptStatus[who]) {
-            if (!activeSt || ptStatus[who].type === 'matchPoint') {
-                activeSide = who;
-                activeSt   = ptStatus[who];
-            }
+        // Points — ADV on advantage (tennis-style), otherwise capped at WIN_SCORE
+        // so deuce wins never show 8. Pops when it changes.
+        const pts = adv === who ? 'ADV' : Math.min(score.points[who], WIN_SCORE);
+        const ptsEl = $(`${who}Score`);
+        if (shownPoints[who] !== pts) {
+            ptsEl.textContent = pts;
+            ptsEl.classList.remove('pop');
+            void ptsEl.offsetWidth;
+            if (shownPoints[who] !== null) ptsEl.classList.add('pop');
+            shownPoints[who] = pts;
+        }
+
+        // Games won pips
+        const pips = $(`${who}Pips`);
+        pips.innerHTML = Array.from({ length: fmt.gamesNeeded }, (_, i) =>
+            `<span class="${i < score.gamesWon[who] ? 'on' : ''}"></span>`).join('');
+
+        // Game point / match point tag (advantage is always one of these)
+        let status = null;
+        if (!deuce && !score.matchEnded && ptStatus[who]) {
+            const { type, count } = ptStatus[who];
+            status = type === 'matchPoint'
+                ? (count === 1 ? 'Match point' : `${count} match points`)
+                : (count === 1 ? 'Game point'  : `${count} game points`);
+        }
+        const statusEl = $(`${who}Status`);
+        if ((statusEl.textContent || null) !== status) {
+            statusEl.innerHTML = status ? `<span>${status}</span>` : '';
         }
     }
 
-    if (banner) {
-        if (activeSt && !deuce) {
-            const name  = activeSide === 'player' ? getPlayerName() : 'AI';
-            const isMP  = activeSt.type === 'matchPoint';
-            const n     = activeSt.count;
-            const label = isMP
-                ? (n === 1 ? 'Match Point' : `${n} Match Points`)
-                : (n === 1 ? 'Game Point'  : `${n} Game Points`);
+    // Centre: "first to 7", format · difficulty · game n, and the deuce pill on the status row
+    $('hudDeuce').hidden = !deuce;
+    $('hudDeuceText').textContent = score.deuceCount > 1 ? `Deuce #${score.deuceCount}` : 'Deuce';
+    const gameNo = score.gamesWon.player + score.gamesWon.ai + 1;
+    $('hudMeta').textContent = [
+        fmt.label,
+        DIFFICULTY_INFO[settings.difficulty].label,
+        fmt.gamesNeeded > 1 && !score.matchEnded ? `Game ${gameNo}` : null,
+    ].filter(Boolean).join(' · ');
 
-            banner.style.display = 'inline-flex';
-            banner.className     = `point-status-banner psb-${activeSide}`;
-            if (bannerWho) bannerWho.textContent = name;
-            if (bannerLbl) bannerLbl.textContent = label;
-        } else {
-            banner.style.display = 'none';
-        }
-    }
-
-    // Deuce pill
-    const deuceEl = document.getElementById('deuceStatus');
-    if (deuceEl) {
-        if (deuce) {
-            deuceEl.textContent   = score.deuceCount > 0 ? `Deuce #${score.deuceCount}` : 'Deuce';
-            deuceEl.style.display = 'inline-flex';
-        } else {
-            deuceEl.style.display = 'none';
-        }
-    }
-
-    // ── Game number badge ──────────────────────────────────────
-    const gameNumEl = document.getElementById('gameNumber');
-    if (gameNumEl) {
-        const fmt = MATCH_FORMATS[score.matchFormat];
-        gameNumEl.textContent = (fmt && fmt.gamesNeeded > 1)
-            ? `Game ${score.gamesWon.player + score.gamesWon.ai + 1}`
-            : '';
-    }
-
-    // ── Shared match track ─────────────────────────────────────
-    const trackWrap = document.getElementById('matchTrackWrap');
-    const track     = document.getElementById('matchTrack');
-    const fmt2      = MATCH_FORMATS[score.matchFormat];
-    const showTrack = fmt2 && fmt2.gamesNeeded > 1;
-    if (trackWrap) trackWrap.style.display = showTrack ? 'flex' : 'none';
-
-    if (track && showTrack) {
-        // Max games in a best-of-N series = N*2-1
-        const totalSlots = fmt2.gamesNeeded * 2 - 1;
-
-        // Rebuild dot elements only when slot count changes
-        if (track.children.length !== totalSlots) {
-            track.innerHTML = '';
-            for (let i = 0; i < totalSlots; i++) {
-                const dot = document.createElement('span');
-                dot.className = 'match-dot';
-                track.appendChild(dot);
-            }
-        }
-
-        // Colour dots in chronological order using gameWinOrder (stored on score state)
-        const dots = track.querySelectorAll('.match-dot');
-        dots.forEach((dot, i) => {
-            dot.className = 'match-dot';
-            const winner = score.gameWinOrder?.[i];
-            if (winner === 'player') dot.classList.add('won-player');
-            else if (winner === 'ai') dot.classList.add('won-ai');
-        });
-    }
-
-    // ── Powerup pips ───────────────────────────────────────────
-    const puLeftEl   = document.getElementById('powerupLeft');
-    const puActiveEl = document.getElementById('powerupActive');
-    if (puLeftEl) {
-        puLeftEl.innerHTML = [0, 1].map(i =>
-            `<span class="pip${(!extremeMode && i < powerup.left) ? ' pip-on' : ''}"></span>`
-        ).join('');
-    }
-    if (puActiveEl) {
-        if (powerup.disabled) {
-            puActiveEl.textContent = 'Disabled';
-            puActiveEl.className   = 'active-powerup is-disabled';
-        } else if (powerup.active) {
-            puActiveEl.textContent = powerup.active;
-            puActiveEl.className   = 'active-powerup is-active';
-        } else {
-            puActiveEl.textContent = 'None active';
-            puActiveEl.className   = 'active-powerup';
-        }
-    }
-
-    // ── Extreme panel ──────────────────────────────────────────
-    const extremePanelEl    = document.getElementById('extremePanel');
-    const extremeStatusText = document.getElementById('extremeStatusText');
-    if (extremePanelEl)    extremePanelEl.classList.toggle('is-extreme', extremeMode);
-    if (extremeStatusText) extremeStatusText.textContent = extremeMode ? 'EXTREME' : 'Normal';
-
-    // ── Pause button ───────────────────────────────────────────
-    if (pauseBtn) {
-        const lbl = document.getElementById('pauseBtnLabel');
-        if (lbl) lbl.textContent = isPaused ? 'Resume' : 'Pause';
-        pauseBtn.classList.toggle('paused', isPaused);
-        const svgEl = pauseBtn.querySelector('svg');
-        if (svgEl) {
-            svgEl.innerHTML = isPaused
-                ? '<polygon points="3,1.5 11,6.5 3,11.5" fill="currentColor"/>'
-                : '<rect x="2" y="1.5" width="3.5" height="10" rx="1" fill="currentColor"/><rect x="7.5" y="1.5" width="3.5" height="10" rx="1" fill="currentColor"/>';
-        }
-    }
-
-    // ── Slider labels ──────────────────────────────────────────
-    if (aiDiffLabel && aiDiffInput) {
-        const level = parseInt(aiDiffInput.value);
-        const label = getDifficultyLabel(level, false);
-        aiDiffLabel.textContent = `${level} — ${label}`;
-        const sliderSection = aiDiffInput.closest('.sidebar-section');
-        if (sliderSection) sliderSection.style.opacity = extremeMode ? '0.45' : '';
-    }
-
-    // ── Format tabs ────────────────────────────────────────────
-    matchFormatBtns.forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.format === score.matchFormat);
+    // Powerups
+    $('powerupPips').innerHTML = [0, 1].map(i =>
+        `<span class="${i < powerup.left ? 'on' : ''}"></span>`).join('');
+    const canUse = running && !powerup.usedThisPoint && powerup.left > 0 && !powerup.disabled;
+    powerupBtns.forEach(b => {
+        const active = powerup.active === b.dataset.powerup;
+        b.classList.toggle('active', active);
+        b.disabled = !canUse && !active;
     });
+    $('powerupNote').textContent = powerup.disabled
+        ? 'Powerups are disabled in Extreme mode.'
+        : powerup.active
+            ? `${powerup.active === 'speed' ? 'Speed' : 'Size'} active this point!`
+            : 'One per point, two per game, during a rally.';
+
+    // Buttons
+    pauseBtn.classList.toggle('is-paused', isPaused);
+    pauseBtn.disabled = score.matchEnded || (!running && !isPaused);
+    $('restartBtn').disabled = score.matchEnded;
+}
+
+// ─── Game over ─────────────────────────────────────────────────────────────────
+let reloadOverTop = null;
+let savedResultId = null;
+
+// Called once when the match is won: saves the result and shows the game-over screen.
+function finishMatch(winner) {
+    const token = matchToken;
+    const summary = {
+        winner,
+        playerName:  getPlayerName(),
+        difficulty:  settings.difficulty,
+        matchFormat: score.matchFormat,
+        gamesWon:    { ...score.gamesWon },
+        finalPoints: { ...score.points },
+        totalPoints: { ...matchStats.points },
+        longestRally: matchStats.longestRally,
+        deuces:      matchStats.deuces,
+        durationSec: Math.round(matchStats.playMs / 1000),
+    };
+    renderGameOver(summary);
+    saveMatchResult(summary, token);
+    setTimeout(() => {
+        if (token !== matchToken) return;
+        showScreen('over');
+        animateNumber($('resultScore'), Number($('resultScore').dataset.value));
+    }, 1800);
+}
+
+function renderGameOver(m) {
+    const won  = m.winner === 'player';
+    const diff = DIFFICULTY_INFO[m.difficulty];
+    $('resultCard').className = `card pad-lg result-card shadow-lift fade-up ${won ? 'won' : 'lost'}`;
+    $('resultIcon').innerHTML = icon(won ? 'trophy' : 'skull');
+    $('resultTitle').textContent = won ? 'Victory!' : 'Defeated';
+    $('resultTitle').className = `result-title ${won ? 'glow-text-primary' : 'glow-text-ai'}`;
+    $('resultSub').innerHTML = `${esc(won ? `${m.playerName} beat the AI` : `The AI beat ${m.playerName}`)} · <strong>${diff.label}</strong> · ${MATCH_FORMATS[m.matchFormat].label}`;
+    $('resultPlayerName').textContent = m.playerName;
+    $('resultGamesPlayer').textContent = m.gamesWon.player;
+    $('resultGamesAi').textContent     = m.gamesWon.ai;
+    $('resultFinal').textContent = `games · final game ${m.finalPoints.player}–${m.finalPoints.ai}`;
+
+    const stats = [
+        { icon: 'target',   label: 'Points won',    value: `${m.totalPoints.player}–${m.totalPoints.ai}`, tone: 'tone-primary' },
+        { icon: 'activity', label: 'Longest rally', value: `${m.longestRally} hits`,                     tone: 'tone-ai' },
+        { icon: 'flame',    label: 'Deuces',        value: `${m.deuces}`,                                tone: 'tone-gold' },
+        { icon: 'timer',    label: 'Duration',      value: formatDuration(m.durationSec),                tone: 'tone-neutral' },
+    ];
+    $('statGrid').innerHTML = stats.map((s, i) => `
+        <div class="stat fade-up" style="--i:${i + 3}">
+            <span class="chip ${s.tone}">${icon(s.icon)}</span>
+            <div class="stat-val">${s.value}</div>
+            <div class="stat-label">${s.label}</div>
+        </div>`).join('');
+
+    const localScore = computeScore({
+        difficulty: m.difficulty, totalPointsPlayer: m.totalPoints.player,
+        gamesWonPlayer: m.gamesWon.player, won,
+    });
+    $('resultScore').dataset.value = localScore;
+    $('resultScore').textContent = '0';
+    $('overTopDiff').textContent = diff.label;
+
+    savedResultId = null;
+    setSaveStatus(isLeaderboardConfigured() ? 'saving' : 'offline');
+    reloadOverTop();
+    refreshIcons();
+}
+
+function setSaveStatus(state, rank) {
+    const el = $('saveStatus');
+    el.className = `save-status ${state}`;
+    const diffLabel = DIFFICULTY_INFO[settings.difficulty].label;
+    el.innerHTML = {
+        saving:  `${icon('loader-circle', 'spin')} Saving result…`,
+        saved:   `${icon('circle-check')} Saved: rank #${rank?.difficulty ?? '?'} on ${diffLabel}, #${rank?.overall ?? '?'} overall`,
+        error:   `${icon('triangle-alert')} Sorry, your result could not be saved to the leaderboard.`,
+        offline: `${icon('cloud-off')} Online leaderboard not connected. Score not saved.`,
+    }[state];
+    refreshIcons();
+}
+
+async function saveMatchResult(m, token) {
+    if (!isLeaderboardConfigured()) return;
+    try {
+        const saved = await submitResult({
+            playerName:        m.playerName,
+            difficulty:        m.difficulty,
+            theme:             getTheme(),
+            matchFormat:       m.matchFormat,
+            won:               m.winner === 'player',
+            gamesWonPlayer:    m.gamesWon.player,
+            gamesWonAi:        m.gamesWon.ai,
+            finalPointsPlayer: m.finalPoints.player,
+            finalPointsAi:     m.finalPoints.ai,
+            totalPointsPlayer: m.totalPoints.player,
+            totalPointsAi:     m.totalPoints.ai,
+            deuceCount:        m.deuces,
+            longestRally:      m.longestRally,
+            durationSec:       m.durationSec,
+        });
+        if (token !== matchToken) return;
+        savedResultId = saved.id;
+        $('resultScore').dataset.value = saved.score;
+        if (screen === 'over') animateNumber($('resultScore'), saved.score);
+        setSaveStatus('saved', { difficulty: saved.rank_difficulty, overall: saved.rank_overall });
+        reloadOverTop();
+    } catch (err) {
+        console.error('Saving match result failed', err);
+        if (token === matchToken) setSaveStatus('error');
+    }
+}
+
+// Counts an element's number up to value with an ease-out curve.
+function animateNumber(el, value, duration = 1200) {
+    const from  = Number(el.textContent) || 0;
+    const start = performance.now();
+    const step  = (now) => {
+        const t = Math.min(1, (now - start) / duration);
+        el.textContent = Math.round(from + (value - from) * (1 - Math.pow(1 - t, 3)));
+        if (t < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
 }
 
 // ─── Game loop ─────────────────────────────────────────────────────────────────
 function update(dt, timestamp) {
     if (!running) return;
     if (!startTimestamp) startTimestamp = timestamp;
+    matchStats.playMs += dt;
 
-    // Ramp: scale ball's base speed reference, not vx/vy directly.
-    // vx/vy grow through bounce speed-ups; ramp only affects new serves
-    // and provides a mild velocity nudge here to counteract friction.
     const elapsed = accumulatedPlayTime + (timestamp - startTimestamp) / 1000;
 
     // Asymptotic speed ramp — approaches maxSpeed smoothly, never exceeds it.
@@ -523,7 +612,7 @@ function update(dt, timestamp) {
     aiY = moveAI({
         aiY, ball, ballRadius: BALL_RADIUS, paddleH: PADDLE_HEIGHT,
         aiX: AI_X, displayH,
-        difficulty: settings.aiDifficulty,
+        difficulty: aiLevel,
         aiSpeedMultiplier: aiSpeedMult,
         extremeMode, playerY, playerPaddleH: PADDLE_HEIGHT_current,
         gameplayScale, dt,
@@ -536,91 +625,17 @@ function gameLoop(timestamp) {
     const dt = Math.min(timestamp - lastTime, 50);
     lastTime = timestamp;
 
-    update(dt, timestamp);
-    draw(ctx, canvas, {
-        ball, playerY, aiY,
-        PLAYER_X, AI_X: getAI_X(),
-        PADDLE_WIDTH, PADDLE_HEIGHT, PADDLE_HEIGHT_current, BALL_RADIUS,
-        showTrajectory
-    });
-
+    if (screen === 'game' && ball) {
+        update(dt, timestamp);
+        draw(ctx, canvas, {
+            ball, playerY, aiY,
+            PLAYER_X, AI_X: getAI_X(),
+            PADDLE_WIDTH, PADDLE_HEIGHT, PADDLE_HEIGHT_current, BALL_RADIUS,
+            showTrajectory: settings.showTrajectory,
+        });
+    }
     requestAnimationFrame(gameLoop);
 }
-
-// ─── Input handlers ────────────────────────────────────────────────────────────
-canvas.addEventListener('mousemove', (e) => {
-    // FIX #7: allow paddle to move always (feels natural pre-serve) but guard powerup keys below
-    const rect   = canvas.getBoundingClientRect();
-    const mouseY = e.clientY - rect.top;
-    const target = mouseY - PADDLE_HEIGHT_current / 2;
-    playerY += (target - playerY) * (0.35 * playerSpeedMult);
-    playerY  = clamp(playerY, 0, getDisplaySize().displayH - PADDLE_HEIGHT_current);
-});
-
-canvas.addEventListener('click', () => {
-    if (!running && !score.matchEnded) startGame();
-});
-
-document.getElementById('overlay')?.addEventListener('click', (e) => {
-    if (e.target?.id === 'restartBtn') return;
-    if (!running && !score.matchEnded) startGame();
-});
-
-window.addEventListener('keydown', (e) => {
-    // FIX #12: ignore keypresses when focus is inside an input
-    if (e.target?.tagName === 'INPUT') return;
-
-    if (e.code === 'Space') {
-        e.preventDefault();
-        if (running && !isPaused)               { doPause();   }
-        else if (isPaused)                       { doResume();  }
-        else if (!running && !score.matchEnded) { startGame(); }
-    }
-    if (e.key.toLowerCase() === 'w') activatePowerup('speed');
-    if (e.key.toLowerCase() === 'd') activatePowerup('size');
-});
-
-pauseBtn?.addEventListener('click',   () => { if (isPaused) doResume(); else doPause(); });
-restartBtn?.addEventListener('click', () => doRestart());
-
-aiDiffInput?.addEventListener('input', () => {
-    settings.aiDifficulty = parseInt(aiDiffInput.value, 10);
-    if (aiDiffLabel) {
-        const label = getDifficultyLabel(settings.aiDifficulty, false); // never Extreme
-        aiDiffLabel.textContent = `${aiDiffInput.value} — ${label}`;
-    }
-});
-
-extremeToggle?.addEventListener('change', () => {
-    extremeMode = !!extremeToggle.checked;
-    if (extremeMode) {
-        powerup = resetPowerupForGame(true);
-        // Disable difficulty slider visually when extreme is on —
-        // the slider value is irrelevant in extreme mode.
-        if (aiDiffInput) aiDiffInput.disabled = true;
-    } else {
-        if (!running) {
-            // Re-enable slider only if not in an active game
-            if (aiDiffInput) aiDiffInput.disabled = false;
-        }
-        powerup = resetPowerupForGame(false);
-    }
-    refreshUI();
-});
-
-trajToggle?.addEventListener('change', () => { showTrajectory = !!trajToggle.checked; });
-
-matchFormatBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-        if (btn.disabled) return;
-        score.matchFormat = btn.dataset.format;
-        refreshUI();
-    });
-});
-
-themeBtns.forEach(btn => {
-    btn.addEventListener('click', () => applyTheme(btn.dataset.theme));
-});
 
 // ─── Powerup activation ────────────────────────────────────────────────────────
 function activatePowerup(type) {
@@ -634,25 +649,120 @@ function activatePowerup(type) {
     refreshUI();
 }
 
+// ─── Game input ────────────────────────────────────────────────────────────────
+// Pointer events cover mouse and touch-drag (the court has touch-action: none).
+canvas.addEventListener('pointermove', (e) => {
+    const rect   = canvas.getBoundingClientRect();
+    const mouseY = e.clientY - rect.top;
+    const target = mouseY - PADDLE_HEIGHT_current / 2;
+    playerY += (target - playerY) * (0.35 * playerSpeedMult);
+    playerY  = clamp(playerY, 0, getDisplaySize().displayH - PADDLE_HEIGHT_current);
+});
+canvas.addEventListener('click', primaryAction);
+overlayEl.addEventListener('click', primaryAction);
+
+window.addEventListener('keydown', (e) => {
+    if (screen !== 'game') return;
+    if (e.target?.tagName === 'INPUT' && e.target.type === 'text') return;
+
+    if (e.code === 'Space') {
+        e.preventDefault();
+        if (running && !isPaused) doPause();
+        else primaryAction();
+    }
+    if (e.key.toLowerCase() === 'w') activatePowerup('speed');
+    if (e.key.toLowerCase() === 'd') activatePowerup('size');
+});
+
+powerupBtns.forEach(b => b.addEventListener('click', () => activatePowerup(b.dataset.powerup)));
+pauseBtn.addEventListener('click', () => { if (isPaused) doResume(); else doPause(); });
+$('restartBtn').addEventListener('click', startMatch);
+$('quitBtn').addEventListener('click', quitToMenu);
+$('rematchBtn').addEventListener('click', startMatch);
+$('menuBtn').addEventListener('click', quitToMenu);
+
+$('trajToggle').addEventListener('change', (e) => {
+    updateSettings({ showTrajectory: e.target.checked });
+    $('menuTrajToggle').checked = e.target.checked;
+});
+
+// ─── Menu ──────────────────────────────────────────────────────────────────────
+let reloadMenuTop = null;
+
+function renderMenu() {
+    const nameInput = $('playerName');
+    nameInput.value = settings.playerName;
+
+    $('diffGrid').innerHTML = DIFF_OPTIONS.map(d => {
+        const cfg = DIFFICULTY[d.cfg];
+        return `<button class="diff-card${d.id === 'extreme' ? ' is-extreme' : ''}" role="radio" data-diff="${d.id}">
+            <span class="diff-head">
+                <span>${DIFFICULTY_INFO[d.id].label}</span>
+                <span class="diff-bars">${[1, 2, 3, 4].map(i => `<span class="${i <= d.bars ? 'on' : ''}"></span>`).join('')}</span>
+            </span>
+            <span class="diff-sub">Ball ${cfg.startSpeed}→${cfg.maxSpeed} · ×${DIFFICULTY_INFO[d.id].multiplier}</span>
+        </button>`;
+    }).join('');
+
+    const syncMenu = () => {
+        document.querySelectorAll('[data-diff]').forEach(b =>
+            b.setAttribute('aria-checked', String(b.dataset.diff === settings.difficulty)));
+        document.querySelectorAll('[data-format]').forEach(b =>
+            b.setAttribute('aria-checked', String(b.dataset.format === settings.matchFormat)));
+        $('diffBlurb').textContent = DIFF_OPTIONS.find(d => d.id === settings.difficulty).blurb;
+        $('menuTopDiff').textContent = DIFFICULTY_INFO[settings.difficulty].label;
+        $('menuTrajToggle').checked = settings.showTrajectory;
+        const valid = settings.playerName.trim().length > 0;
+        $('startBtn').disabled = !valid;
+        $('startError').hidden = valid;
+    };
+
+    nameInput.addEventListener('input', () => { updateSettings({ playerName: nameInput.value.slice(0, 14) }); syncMenu(); });
+    nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter' && settings.playerName.trim()) startMatch(); });
+    document.querySelectorAll('[data-diff]').forEach(b => b.addEventListener('click', () => {
+        updateSettings({ difficulty: b.dataset.diff });
+        syncMenu();
+        reloadMenuTop();
+    }));
+    document.querySelectorAll('[data-format]').forEach(b => b.addEventListener('click', () => {
+        updateSettings({ matchFormat: b.dataset.format });
+        syncMenu();
+    }));
+    $('menuTrajToggle').addEventListener('change', (e) => updateSettings({ showTrajectory: e.target.checked }));
+    $('startBtn').addEventListener('click', () => { if (settings.playerName.trim()) startMatch(); });
+
+    syncMenu();
+}
+
+// ─── Menu court preview (matches the active theme's canvas look) ─────────────────
+// Lifts an rgba() colour's alpha so faint canvas lines stay visible at preview size.
+const boostAlpha = (rgba, mult) => rgba.replace(/([\d.]+)\)$/, (_, a) => `${Math.min(1, parseFloat(a) * mult)})`);
+
+function renderCourtPreview(themeId) {
+    const c = THEMES[themeId].canvas;
+    const set = (id, attrs) => { const el = $(id); for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v); };
+    $('courtPreview').style.background = c.bgGrad ? `linear-gradient(${c.bgGradTop}, ${c.bgGradBot})` : c.bg;
+    set('cpNet', { stroke: boostAlpha(c.netColor, 3) });
+    const rx = c.paddleStyle === 'retro' ? 0 : 2;
+    set('cpPlayer', { fill: c.playerColor, rx });
+    set('cpAi',     { fill: c.aiColor, rx });
+    // Glowing themes shade the ball as a sphere; flat themes use the plain ball colour.
+    set('cpBall',     { fill: c.ballGlow ? 'url(#cp-ball-shade)' : c.ballColor });
+    set('cpBallGlow', { fill: c.ballGlowColor ?? 'rgba(230,240,255,0.5)', display: c.ballGlow ? 'inline' : 'none' });
+    set('cpGrid', c.grid ? { display: 'inline', stroke: boostAlpha(c.gridColor, 6) } : { display: 'none' });
+}
+
 // ─── Init ──────────────────────────────────────────────────────────────────────
 (function init() {
-    // Restore saved theme (fallback to 'neon')
-    let savedTheme = 'neon';
-    try { savedTheme = localStorage.getItem('pongai-theme') || 'neon'; } catch {}
-    applyTheme(savedTheme);
+    renderMenu();
+    initPage();
+    setRendererTheme(getTheme());
+    renderCourtPreview(getTheme());
+    onThemeChange(id => { setRendererTheme(id); renderCourtPreview(id); });
 
-    doResizeCanvas();
-    ball = newBall();
-    resetPositions();
-    unlockInputs();
-    refreshUI();
-    showOverlay('Click or press Space to start');
+    reloadMenuTop = mountResults($('menuTop'), () => ({ view: 'top', difficulty: settings.difficulty, limit: 3, compact: true }));
+    reloadOverTop = mountResults($('overTop'), () => ({ view: 'top', difficulty: settings.difficulty, limit: 10, highlightId: savedResultId }), { immediate: false });
 
-    // FIX #14: ResizeObserver inside init so DOM is guaranteed ready.
-    new ResizeObserver(() => {
-        doResizeCanvas();
-        refreshUI();
-    }).observe(canvas.parentElement);
-
+    new ResizeObserver(() => doResizeCanvas()).observe(canvas.parentElement);
     requestAnimationFrame(gameLoop);
 })();
